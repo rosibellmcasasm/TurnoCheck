@@ -3,10 +3,20 @@
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Camera, MapPin, ArrowLeft, Check, AlertTriangle } from "lucide-react";
-import { readAppData, writeAppData, hoyISO, horaAhora, type AppData } from "@/lib/app-storage";
-import type { Marcacion } from "@/lib/nomina";
+import { createClient } from "@/lib/supabase/client";
+import {
+  ensureCompany,
+  listEmployees,
+  listTimeEntriesForDate,
+  crearMarcacionEntrada,
+  marcarSalida,
+  type Company,
+  type Employee,
+  type TimeEntry,
+} from "@/lib/supabase/queries";
+import { hoyISO, horaAhora } from "@/lib/app-storage";
 
-type FaseCamara = "cargando" | "lista" | "error" | "capturada";
+type FaseCamara = "cargando-datos" | "cargando" | "lista" | "error" | "capturada";
 type EstadoGeo = "buscando" | "ok" | "error";
 
 function MarcarContenido() {
@@ -17,25 +27,43 @@ function MarcarContenido() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  const [fase, setFase] = useState<FaseCamara>("cargando");
-  const [foto, setFoto] = useState<string | null>(null);
+  const [fase, setFase] = useState<FaseCamara>("cargando-datos");
+  const [foto, setFoto] = useState<Blob | null>(null);
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [geo, setGeo] = useState<EstadoGeo>("buscando");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [esFestivo, setEsFestivo] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [data, setData] = useState<AppData | null>(null);
+
+  const [userId, setUserId] = useState<string | null>(null);
+  const [company, setCompany] = useState<Company | null>(null);
+  const [empleado, setEmpleado] = useState<Employee | null>(null);
+  const [turnoAbierto, setTurnoAbierto] = useState<TimeEntry | null>(null);
 
   useEffect(() => {
-    setData(readAppData());
-  }, []);
+    const supabase = createClient();
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const empresa = await ensureCompany(supabase, user.id);
+      const [emps, hoy] = await Promise.all([
+        listEmployees(supabase, empresa.id),
+        listTimeEntriesForDate(supabase, empresa.id, hoyISO()),
+      ]);
+      setUserId(user.id);
+      setCompany(empresa);
+      setEmpleado(emps.find((e) => e.id === empleadoId) ?? null);
+      setTurnoAbierto(hoy.find((e) => e.employee_id === empleadoId && !e.hora_salida) ?? null);
+      setFase("cargando");
+    })();
+  }, [empleadoId]);
 
-  const empleado = data?.empleados.find((e) => e.id === empleadoId);
-  const turnoAbierto = data?.marcaciones.find(
-    (m) => m.empleadoId === empleadoId && m.fecha === hoyISO() && !m.horaSalida,
-  );
   const tipo: "entrada" | "salida" = turnoAbierto ? "salida" : "entrada";
 
   useEffect(() => {
+    if (fase !== "cargando") return;
     let activo = true;
     navigator.mediaDevices
       ?.getUserMedia({ video: { facingMode: "user" }, audio: false })
@@ -60,7 +88,7 @@ function MarcarContenido() {
       activo = false;
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
-  }, []);
+  }, [fase]);
 
   function capturar() {
     const video = videoRef.current;
@@ -70,37 +98,57 @@ function MarcarContenido() {
     canvas.height = video.videoHeight || 375;
     const ctx = canvas.getContext("2d");
     ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
-    setFoto(canvas.toDataURL("image/jpeg", 0.8));
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          setFoto(blob);
+          setFotoPreview(URL.createObjectURL(blob));
+        }
+      },
+      "image/jpeg",
+      0.8,
+    );
     streamRef.current?.getTracks().forEach((t) => t.stop());
     setFase("capturada");
   }
 
-  function confirmar() {
-    if (!empleado || !data) return;
+  async function confirmar() {
+    if (!empleado || !company || !userId) return;
     setGuardando(true);
+    const supabase = createClient();
+
+    let fotoUrl: string | undefined;
+    if (foto) {
+      const path = `${userId}/${Date.now()}.jpg`;
+      const { error } = await supabase.storage.from("marcaciones").upload(path, foto, {
+        contentType: "image/jpeg",
+      });
+      if (!error) fotoUrl = path;
+    }
+
     if (tipo === "entrada") {
-      const nueva: Marcacion = {
-        id: crypto.randomUUID(),
-        empleadoId: empleado.id,
+      await crearMarcacionEntrada(supabase, userId, company.id, {
+        employee_id: empleado.id,
         fecha: hoyISO(),
-        horaEntrada: horaAhora(),
-        horaSalida: null,
-        esFestivo,
-        fotoUrl: foto ?? undefined,
+        hora_entrada: horaAhora(),
+        es_festivo: esFestivo,
+        foto_url: fotoUrl,
         lat: coords?.lat,
         lng: coords?.lng,
-      };
-      writeAppData({ ...data, marcaciones: [...data.marcaciones, nueva] });
+      });
     } else if (turnoAbierto) {
-      const marcaciones = data.marcaciones.map((m) =>
-        m.id === turnoAbierto.id ? { ...m, horaSalida: horaAhora() } : m,
-      );
-      writeAppData({ ...data, marcaciones });
+      await marcarSalida(supabase, turnoAbierto.id, horaAhora());
     }
     router.push("/app");
   }
 
-  if (!data) return null;
+  if (fase === "cargando-datos") {
+    return (
+      <div className="flex min-h-dvh items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   if (!empleado) {
     return (
@@ -154,7 +202,10 @@ function MarcarContenido() {
           </div>
         ) : (
           <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-secondary">
-            {foto && <img src={foto} alt="Foto de la marcación" className="h-full w-full object-cover" />}
+            {fotoPreview && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={fotoPreview} alt="Foto de la marcación" className="h-full w-full object-cover" />
+            )}
             <span className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-success text-white">
               <Check className="h-4 w-4" strokeWidth={3} />
             </span>

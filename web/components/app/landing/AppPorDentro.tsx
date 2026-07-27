@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PhoneMock, PhonePlaceholder } from "./PhoneMock";
+import { PhoneMock } from "./PhoneMock";
 import { Reveal } from "./Reveal";
+import { ScreenHoy, ScreenReporte, ScreenWhatsapp } from "./AppScreens";
 
 const PANTALLAS = [
-  { label: "Hoy: quién llegó y quién no" },
-  { label: "Cierre de quincena en 1 clic" },
-  { label: "Reporte para tu contador por WhatsApp" },
+  { label: "Hoy: quién llegó y quién no", Screen: ScreenHoy },
+  { label: "Cierre de quincena en 1 clic", Screen: ScreenReporte },
+  { label: "Reporte para tu contador por WhatsApp", Screen: ScreenWhatsapp },
 ];
 
 export function AppPorDentro() {
@@ -34,7 +35,7 @@ export function AppPorDentro() {
           Así se ve TurnoCheck por dentro
         </h2>
         <p className="mx-auto mt-3 max-w-md text-center text-sm text-muted-foreground">
-          Estamos terminando de construir estas pantallas — así están planeadas.
+          Así se ve tu día a día en TurnoCheck.
         </p>
       </Reveal>
 
@@ -45,7 +46,10 @@ export function AppPorDentro() {
         onTouchStart={() => setPaused(true)}
       >
         <PhoneMock>
-          <PhonePlaceholder label={PANTALLAS[index].label} />
+          {(() => {
+            const { Screen } = PANTALLAS[index];
+            return <Screen />;
+          })()}
         </PhoneMock>
       </div>
 

@@ -2,8 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { Info, FileDown } from "lucide-react";
-import { readAppData, type AppData } from "@/lib/app-storage";
-import { agruparPorSemana, liquidarSemana } from "@/lib/nomina";
+import { createClient } from "@/lib/supabase/client";
+import { ensureCompany, listEmployees, listTimeEntriesInRange, type Employee, type TimeEntry } from "@/lib/supabase/queries";
+import { agruparPorSemana, liquidarSemana, type Marcacion } from "@/lib/nomina";
+
+function aMarcacion(t: TimeEntry): Marcacion {
+  return {
+    id: t.id,
+    empleadoId: t.employee_id,
+    fecha: t.fecha,
+    horaEntrada: t.hora_entrada.slice(0, 5),
+    horaSalida: t.hora_salida ? t.hora_salida.slice(0, 5) : null,
+    esFestivo: t.es_festivo,
+  };
+}
 
 function formatearSemana(lunesISO: string) {
   const [y, m, d] = lunesISO.split("-").map(Number);
@@ -15,15 +27,47 @@ function formatearSemana(lunesISO: string) {
 }
 
 export default function ReportesPage() {
-  const [data, setData] = useState<AppData | null>(null);
+  const [empleados, setEmpleados] = useState<Employee[]>([]);
+  const [marcaciones, setMarcaciones] = useState<Marcacion[]>([]);
+  const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    setData(readAppData());
+    const supabase = createClient();
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const empresa = await ensureCompany(supabase, user.id);
+      const hoy = new Date();
+      const hace60 = new Date(hoy);
+      hace60.setDate(hoy.getDate() - 60);
+      const [emps, entradas] = await Promise.all([
+        listEmployees(supabase, empresa.id),
+        listTimeEntriesInRange(
+          supabase,
+          empresa.id,
+          hace60.toISOString().slice(0, 10),
+          hoy.toISOString().slice(0, 10),
+        ),
+      ]);
+      setEmpleados(emps);
+      setMarcaciones(entradas.map(aMarcacion));
+      setCargando(false);
+    })();
   }, []);
 
-  if (!data) return null;
+  if (cargando) {
+    return (
+      <div className="space-y-3 px-5 pt-6">
+        <div className="h-7 w-32 animate-pulse rounded bg-secondary" />
+        <div className="h-16 animate-pulse rounded-xl bg-secondary" />
+        <div className="h-32 animate-pulse rounded-2xl bg-secondary" />
+      </div>
+    );
+  }
 
-  const semanas = agruparPorSemana(data.marcaciones);
+  const semanas = agruparPorSemana(marcaciones);
   const semanasOrdenadas = Object.keys(semanas).sort().reverse();
 
   return (
@@ -39,7 +83,7 @@ export default function ReportesPage() {
       </div>
 
       {semanasOrdenadas.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-dashed border-border p-8 text-center">
+        <div className="mt-6 flex min-h-[40vh] flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
           <p className="text-sm text-muted-foreground">
             Todavía no hay marcaciones completas para liquidar. Marca la salida de un
             turno en &quot;Hoy&quot; para ver tu primer reporte.
@@ -51,11 +95,11 @@ export default function ReportesPage() {
             const marcacionesSemana = semanas[semanaKey].filter((m) => m.horaSalida);
             if (marcacionesSemana.length === 0) return null;
 
-            const porEmpleado = data.empleados
+            const porEmpleado = empleados
               .map((emp) => {
                 const propias = marcacionesSemana.filter((m) => m.empleadoId === emp.id);
                 if (propias.length === 0) return null;
-                return { emp, liq: liquidarSemana(propias, emp.salarioMensual) };
+                return { emp, liq: liquidarSemana(propias, emp.salario_mensual) };
               })
               .filter((x): x is NonNullable<typeof x> => x !== null);
 

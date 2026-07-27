@@ -3,40 +3,84 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Camera, ShieldCheck, ChevronRight } from "lucide-react";
-import { readAppData, hoyISO, type AppData } from "@/lib/app-storage";
-import { desglosarMarcacion } from "@/lib/nomina";
+import { createClient } from "@/lib/supabase/client";
+import {
+  ensureCompany,
+  listEmployees,
+  listTimeEntriesForDate,
+  type Company,
+  type Employee,
+  type TimeEntry,
+} from "@/lib/supabase/queries";
+import { desglosarMarcacion, type Marcacion } from "@/lib/nomina";
+import { hoyISO } from "@/lib/app-storage";
 
-function estadoDeHoy(empleadoId: string, data: AppData) {
-  const marcacionesHoy = data.marcaciones.filter(
-    (m) => m.empleadoId === empleadoId && m.fecha === hoyISO(),
-  );
-  const abierta = marcacionesHoy.find((m) => !m.horaSalida);
-  if (abierta) return { estado: "activo" as const, hora: abierta.horaEntrada };
-  const completa = marcacionesHoy[marcacionesHoy.length - 1];
-  if (completa) return { estado: "completo" as const, hora: completa.horaEntrada };
+function aMarcacion(t: TimeEntry): Marcacion {
+  return {
+    id: t.id,
+    empleadoId: t.employee_id,
+    fecha: t.fecha,
+    horaEntrada: t.hora_entrada.slice(0, 5),
+    horaSalida: t.hora_salida ? t.hora_salida.slice(0, 5) : null,
+    esFestivo: t.es_festivo,
+  };
+}
+
+function estadoDeHoy(empleadoId: string, entradas: TimeEntry[]) {
+  const propias = entradas.filter((e) => e.employee_id === empleadoId);
+  const abierta = propias.find((e) => !e.hora_salida);
+  if (abierta) return { estado: "activo" as const, hora: abierta.hora_entrada.slice(0, 5) };
+  const completa = propias[propias.length - 1];
+  if (completa) return { estado: "completo" as const, hora: completa.hora_entrada.slice(0, 5) };
   return { estado: "pendiente" as const, hora: null };
 }
 
 export default function HoyPage() {
-  const [data, setData] = useState<AppData | null>(null);
+  const [company, setCompany] = useState<Company | null>(null);
+  const [empleados, setEmpleados] = useState<Employee[]>([]);
+  const [entradas, setEntradas] = useState<TimeEntry[]>([]);
+  const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    setData(readAppData());
+    const supabase = createClient();
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const empresa = await ensureCompany(supabase, user.id);
+      const [emps, hoy] = await Promise.all([
+        listEmployees(supabase, empresa.id),
+        listTimeEntriesForDate(supabase, empresa.id, hoyISO()),
+      ]);
+      setCompany(empresa);
+      setEmpleados(emps);
+      setEntradas(hoy);
+      setCargando(false);
+    })();
   }, []);
 
-  if (!data) return null;
+  if (cargando || !company) {
+    return (
+      <div className="space-y-3 px-5 pt-6">
+        <div className="h-4 w-32 animate-pulse rounded bg-secondary" />
+        <div className="h-7 w-48 animate-pulse rounded bg-secondary" />
+        <div className="mt-4 h-32 animate-pulse rounded-2xl bg-secondary" />
+        <div className="h-16 animate-pulse rounded-xl bg-secondary" />
+      </div>
+    );
+  }
 
-  const empleadosActivos = data.empleados.filter((e) => e.activo);
-  const marcacionesHoy = data.marcaciones.filter((m) => m.fecha === hoyISO());
+  const empleadosActivos = empleados.filter((e) => e.activo);
   const yaMarcaron = empleadosActivos.filter(
-    (e) => estadoDeHoy(e.id, data).estado !== "pendiente",
+    (e) => estadoDeHoy(e.id, entradas).estado !== "pendiente",
   ).length;
 
-  const nominaHoy = marcacionesHoy.reduce((acc, m) => {
-    const empleado = data.empleados.find((e) => e.id === m.empleadoId);
-    const desglose = desglosarMarcacion(m);
+  const nominaHoy = entradas.reduce((acc, m) => {
+    const empleado = empleados.find((e) => e.id === m.employee_id);
+    const desglose = desglosarMarcacion(aMarcacion(m));
     if (!empleado || !desglose) return acc;
-    const valorHora = empleado.salarioMensual / 210;
+    const valorHora = empleado.salario_mensual / 210;
     return acc + desglose.horasTotal * valorHora;
   }, 0);
 
@@ -50,7 +94,7 @@ export default function HoyPage() {
         })}
       </p>
       <h1 className="font-display text-xl font-extrabold text-foreground">
-        Hola, {data.empresa.nombre}
+        Hola, {company.name}
       </h1>
 
       <div className="mt-4 rounded-2xl bg-primary p-5 text-primary-foreground">
@@ -75,7 +119,8 @@ export default function HoyPage() {
       </div>
 
       {empleadosActivos.length === 0 ? (
-        <div className="mt-3 rounded-xl border border-dashed border-border p-6 text-center">
+        <div className="mt-3 flex min-h-[45vh] flex-col items-center justify-center rounded-xl border border-dashed border-border p-6 text-center">
+          <ShieldCheck className="mb-2 h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
             Todavía no tienes empleados activos.
           </p>
@@ -89,7 +134,7 @@ export default function HoyPage() {
       ) : (
         <div className="mt-3 space-y-2">
           {empleadosActivos.map((emp) => {
-            const { estado, hora } = estadoDeHoy(emp.id, data);
+            const { estado, hora } = estadoDeHoy(emp.id, entradas);
             return (
               <Link
                 key={emp.id}

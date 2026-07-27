@@ -45,6 +45,9 @@ export default function PaywallPage() {
   const [anual, setAnual] = useState(true);
 
   useEffect(() => {
+    // Mismo caso que en /onboarding: lectura única de localStorage tras montar,
+    // necesaria porque no existe durante el render de servidor.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setData(readOnboarding());
   }, []);
 

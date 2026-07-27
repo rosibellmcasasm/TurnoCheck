@@ -1,18 +1,37 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Mail, ArrowRight } from "lucide-react";
+import { Mail, ArrowRight, AlertTriangle } from "lucide-react";
 import Image from "next/image";
+import { createClient } from "@/lib/supabase/client";
 
-export default function LoginPage() {
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") || "/app";
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!email.includes("@")) return;
-    // TODO Sesión 6: reemplazar por supabase.auth.signInWithOtp({ email }) real.
+    setEnviando(true);
+    setError(null);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
+    });
+    setEnviando(false);
+    if (error) {
+      setError("No pudimos enviar el link. Revisa tu correo e intenta de nuevo.");
+      return;
+    }
     setSent(true);
   }
 
@@ -48,11 +67,18 @@ export default function LoginPage() {
                 />
               </div>
             </label>
+            {error && (
+              <p className="mt-3 flex items-center gap-1.5 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+              </p>
+            )}
             <button
               type="submit"
-              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground"
+              disabled={enviando}
+              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-60"
             >
-              Enviarme el link <ArrowRight className="h-4 w-4" />
+              {enviando ? "Enviando..." : "Enviarme el link"}
+              {!enviando && <ArrowRight className="h-4 w-4" />}
             </button>
           </form>
         ) : (
@@ -85,5 +111,13 @@ export default function LoginPage() {
         </Link>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

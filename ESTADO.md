@@ -1,7 +1,14 @@
 # ESTADO — TurnoCheck
 Última actualización: 2026-07-26 | Sesión actual: 1
 
-⏸️ CHECKPOINT — Última acción completada: Sesión 5 (app interna) construida y verificada — panel "Hoy" con nómina en vivo, marcación real con cámara+GPS (con fallback si el dispositivo no da permiso), Empleados (CRUD), Reportes con el motor de cálculo legal (Ley 2101, 42h/210), Ajustes. Se encontraron y corrigieron 2 bugs reales durante la verificación (ver Problemas conocidos → resueltos). tsc+build limpios, sin errores de consola, matemática del motor validada a mano. / Siguiente acción exacta: confirmar con el usuario y arrancar Sesión 6 (Supabase real, Hotmart, seguridad/RLS) para que todo esto deje de vivir solo en localStorage.
+⏸️ CHECKPOINT — Última acción completada: Auditoría exhaustiva ejecutada y sus hallazgos corregidos —
+backend real conectado (Supabase: schema+RLS+auth+proxy de protección), placeholders del carrusel
+reemplazados por pantallas reales, estados vacíos/loading/error agregados, header con logo en /app,
+límite de plan aplicado (DB + cliente). tsc+lint+build limpios, verificado en navegador (proxy
+redirige /app→/login sin sesión). / Siguiente acción exacta: usuario debe (a) configurar Site URL +
+Redirect URLs en el dashboard de Supabase Auth para que el magic link funcione en producción, (b)
+crear el repo vacío en GitHub y darme la URL para el primer push, (c) probar el login real de punta
+a punta con su propio correo.
 
 ## Qué es esta app (3 líneas máximo)
 Reloj checador desde el celular (con foto + GPS) para Pymes colombianas de 3-15 empleados. Calcula automático horas extra, recargos nocturnos, dominicales y festivos según la ley colombiana, y genera el reporte de nómina en 1 clic. Monetización: suscripción mensual/anual.
@@ -84,8 +91,8 @@ Reloj checador desde el celular (con foto + GPS) para Pymes colombianas de 3-15 
 - Modelo de IA: no aplica (esta app no usa IA generativa — es motor de reglas legales, no modelo de lenguaje)
 - Regla "nunca" del producto: nunca calcular o reportar un valor de nómina que no siga la fórmula legal colombiana vigente y verificable · nunca compartir la foto o ubicación de un empleado con nadie fuera del dueño de esa empresa · nunca dejar vencer el trial y cobrar sin avisar antes la fecha y el monto exactos
 - Loop de retención (24, decidido Sesión 4): Gatillo = hora de inicio de turno / recordatorio · Acción = marcar entrada/salida con foto+GPS · Recompensa = ver el cálculo en vivo + tranquilidad de tener todo blindado · Inversión = historial acumulado de empleados/turnos/reportes (cambiar de app cuesta más cuanto más se usa)
-- Método de auth (26, decidido Sesión 4): Supabase Auth con Magic Link (passwordless) por correo — menor fricción para dueños de Pyme no técnicos que olvidan contraseñas. Se implementa en Sesión 6 (servicios externos); en Sesión 4 el flujo de login está construido en UI con datos locales, sin backend aún.
-- Modelo de datos preliminar (25, se detalla con RLS en Sesión 6): companies · employees · time_entries · subscriptions — todo con owner_id trazado a auth.uid()
+- Método de auth (26): Supabase Auth con Magic Link (passwordless) por correo — IMPLEMENTADO 2026-07-27 (`supabase.auth.signInWithOtp` + `/auth/callback`).
+- Modelo de datos (25): IMPLEMENTADO 2026-07-27 — companies · employees · time_entries · subscriptions, todo con `owner_id` denormalizado + indexado (RLS de alto rendimiento) + Storage bucket `marcaciones`. Migraciones en `web/supabase/migrations/0001-0004`.
 - Supabase: proyecto NUEVO creado 2026-07-26 vía MCP — "turnocheck" (id `dqnznvkyurlsjctnpizb`, región us-east-1, plan free $0/mes, confirmado con el usuario antes de crear). URL: https://dqnznvkyurlsjctnpizb.supabase.co. Separado del proyecto "Evoke App" (otra app, inactivo). `.env.local` creado con URL + publishable key (públicas, sin riesgo); la SUPABASE_SECRET_KEY la pega el usuario directamente desde el dashboard — el agente nunca la ve. `.env.example` (sin secretos) SÍ se commitea; se corrigió `web/.gitignore` (`.env*` ignoraba también `.env.example` por error — se agregó `!.env.example`).
 - Git: repo inicializado en la raíz del proyecto 2026-07-26, primer commit hecho. Pendiente: usuario debe crear el repositorio vacío en GitHub y darme la URL para conectar el remoto y hacer push (una de las 5 cosas que le tocan a él).
 
@@ -111,6 +118,30 @@ Reloj checador desde el celular (con foto + GPS) para Pymes colombianas de 3-15 
   Hero.tsx`) — sigue la jerarquía de PRUEBA SOCIAL EN FRÍO del 19: un demo real siempre le gana a
   un mockup. Archivos: `public/video/turnocheck-demo.mp4` + `turnocheck-demo-poster.jpg`.
   PhoneMock.tsx se conservó (lo sigue usando la sección "La app por dentro").
+
+## Auditoría exhaustiva y correcciones (2026-07-27)
+Reporte completo entregado y aprobado ("todo") por el usuario; ejecutado por capas:
+- 🔴 CRÍTICOS resueltos: (1) Backend real conectado — Supabase project `dqnznvkyurlsjctnpizb`,
+  4 tablas (companies/employees/time_entries/subscriptions) con RLS por `owner_id = (select auth.uid())`
+  + índices, trigger de límite de plan, bucket de Storage `marcaciones` (privado, por carpeta de usuario).
+  Advisors de seguridad y rendimiento revisados y en verde. (2) Auth real por magic link
+  (`supabase.auth.signInWithOtp` + `/auth/callback` que crea la empresa desde el onboarding anónimo
+  y limpia el localStorage) — reemplaza el login de mentira. `proxy.ts` (antes middleware.ts — Next 16
+  renombró la convención) protege TODO `/app/*`: sin sesión, redirige a `/login`. (3) Carrusel "La app
+  por dentro" ya NO dice "en construcción": muestra 3 reproducciones fieles de las pantallas reales
+  (`components/app/landing/AppScreens.tsx`) — no son PNG literales (la app exige login), pero sí el
+  mismo diseño/contenido, declarado como tal (nivel 2 de mockups honestos, 19).
+- 🟠 IMPORTANTES resueltos: límite de empleados por plan aplicado en 2 capas (trigger SQL +
+  `puedeAgregarEmpleado()` en cliente, que manda al paywall en vez de mostrar un error) · vacío
+  muerto corregido en estados vacíos de Hoy/Reportes (centrado + ícono) · header con logo agregado
+  a todo `/app/*` (`AppHeader.tsx`) · Error Boundaries agregados (`app/error.tsx` y `app/app/error.tsx`).
+- 🟡 PULIDO resuelto: skeletons de carga en las 4 pantallas del panel (ya no pantalla blanca mientras
+  carga). PENDIENTE (no crítico, anotado para después): estado "offline" explícito en /app/marcar.
+- Se corrigieron además 3 errores reales de lint (`react-hooks/set-state-in-effect`) durante la
+  verificación — 2 son falsos positivos documentados (lectura de localStorage tras montar, necesaria
+  por SSR) y 1 se resolvió reescribiendo el patrón (empleados/page.tsx) sin necesidad de excepción.
+- Sin revisor-visual disponible en este entorno — auditoría de diseño puntuada por observación directa
+  y declarada como tal, no autoevaluada por quien construyó (se avisó explícitamente al usuario).
 
 ## Sesiones completadas ✅
 - Sesión 3 — Página de ventas: landing con las 10 secciones canónicas + mecanismo bautizado "el Cierre Blindado" + páginas legales reales (/privacidad /terminos /reembolso /contacto). Auditoría de escaneabilidad pasada (se corrigió la sección de Agitación, que era un muro de texto). Pendiente: reemplazar los placeholders del carrusel por screenshots reales cuando exista la app interna.
@@ -147,7 +178,13 @@ Reloj checador desde el celular (con foto + GPS) para Pymes colombianas de 3-15 
   tabla de festivos por año (se agrega en Sesión 6 con base de datos real).
 
 ## Pendientes del usuario (acciones que el usuario debe hacer)
-- [ ] Más adelante: crear cuentas de Hotmart (venta), Supabase (base de datos) y Vercel (publicación), comprar el dominio, y pegar un par de claves. Se avisará cuándo y se guiará paso a paso.
+- [ ] Configurar en el dashboard de Supabase (Authentication → URL Configuration): Site URL y Redirect
+      URLs (agregar `http://localhost:3000/auth/callback` para dev y la URL de Vercel cuando exista)
+      — sin esto el link mágico puede rechazar la redirección.
+- [ ] Crear el repositorio vacío en GitHub (turnocheck) y darme la URL para el primer push.
+- [ ] Crear cuenta de Vercel para publicar (aún no se ha hecho).
+- [ ] Crear cuenta de Hotmart cuando se llegue a la sesión de venta/cobro real.
+- [ ] Probar el login real con su propio correo de punta a punta (pedir el link, abrirlo, confirmar que crea la empresa).
 
 ## Notas para la próxima sesión
 - El usuario aportó un documento de investigación propio muy completo (avatar, dolores, deseos, objeciones, MVP, monetización, riesgos) — ya se usó como Reporte de Validación de la Sesión 1.

@@ -24,6 +24,10 @@ export default function OnboardingPage() {
   const [data, setData] = useState<OnboardingData>(ONBOARDING_DEFAULT);
 
   useEffect(() => {
+    // localStorage no existe durante el render de servidor: se lee acá (una sola
+    // vez, tras montar) para no romper la hidratación. No es un fetch async que
+    // vaya a "cascadear" renders — es la lectura inicial de un valor solo-cliente.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setData(readOnboarding());
   }, []);
 
