@@ -13,8 +13,8 @@ export function Hero() {
             Cierra tu quincena en 60 segundos, blindado.
           </h1>
           <p className="mt-5 max-w-md text-base leading-relaxed text-muted-foreground sm:text-lg">
-            Marcación con foto y GPS + cálculo automático de horas extras,
-            recargos y dominicales, según la ley colombiana.
+            El Cierre a Prueba de Demandas hace las cuentas por ti — tú
+            solo tomas la foto.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">

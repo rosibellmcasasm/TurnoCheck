@@ -24,7 +24,12 @@ export function StepResultado({ data, onNext }: { data: OnboardingData; onNext: 
         Así se ve para cada empleado de {negocio}, todos los días.
       </p>
 
-      <div className="mt-6 rounded-2xl border border-border bg-card p-5">
+      <p className="mt-4 rounded-xl bg-accent px-4 py-3 text-sm leading-snug text-accent-foreground">
+        No es que hagas mal las cuentas — es que la ley colombiana tiene
+        demasiadas reglas para calcular esto a mano sin equivocarse.
+      </p>
+
+      <div className="mt-4 rounded-2xl border border-border bg-card p-5">
         <div className="flex items-center gap-3 rounded-xl bg-background p-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
             <Camera className="h-4.5 w-4.5" />

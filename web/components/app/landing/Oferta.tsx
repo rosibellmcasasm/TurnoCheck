@@ -29,7 +29,7 @@ const PLANES = [
     features: [
       "Todo lo del Plan Micro",
       "Reporte por WhatsApp en 1 clic",
-      "Respaldo legal con foto + GPS ilimitado",
+      "Respaldo con foto + GPS ilimitado ante cualquier reclamo",
       "Soporte prioritario",
     ],
   },
@@ -123,6 +123,9 @@ export function Oferta() {
                 >
                   Crear mi cuenta gratis
                 </a>
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  Sin esto, sigues arriesgando tu plata y tu tranquilidad cada quincena.
+                </p>
               </div>
             </Reveal>
           );
@@ -136,7 +139,7 @@ export function Oferta() {
           </p>
           <ul className="mt-3 space-y-2 text-sm text-foreground">
             <li className="flex justify-between">
-              <span>El Cierre Blindado (cálculo automático de nómina)</span>
+              <span>El Cierre a Prueba de Demandas (cálculo automático de nómina)</span>
               <span className="tabular text-muted-foreground">$39/mes</span>
             </li>
             <li className="flex justify-between">
@@ -144,7 +147,7 @@ export function Oferta() {
               <span className="tabular text-muted-foreground">$15/mes</span>
             </li>
             <li className="flex justify-between">
-              <span>Respaldo legal con foto + GPS</span>
+              <span>Respaldo con foto + GPS ante cualquier reclamo</span>
               <span className="tabular text-muted-foreground">$25/mes</span>
             </li>
           </ul>

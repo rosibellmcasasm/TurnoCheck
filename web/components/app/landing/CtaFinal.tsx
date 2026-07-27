@@ -26,8 +26,8 @@ export function CtaFinal() {
           </a>
           <p className="mx-auto mt-8 max-w-md text-left text-xs leading-relaxed opacity-80">
             PS: TurnoCheck liquida tu quincena en 60 segundos con el Cierre
-            Blindado. Hoy entras desde $9.99/mes, con 7 días de prueba y la
-            Garantía del Primer Cierre. Cancela cuando quieras.
+            a Prueba de Demandas. Hoy entras desde $9.99/mes, con 7 días de
+            prueba y la Garantía del Primer Cierre. Cancela cuando quieras.
           </p>
         </Reveal>
       </div>

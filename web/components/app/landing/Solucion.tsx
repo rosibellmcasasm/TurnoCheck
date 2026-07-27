@@ -9,7 +9,7 @@ const PASOS = [
   },
   {
     icon: Calculator,
-    titulo: "El Cierre Blindado calcula",
+    titulo: "El Cierre a Prueba de Demandas calcula",
     texto: "Horas ordinarias, extras, recargos nocturnos, dominicales y festivos — con la ley colombiana ya integrada.",
   },
   {
@@ -30,7 +30,7 @@ export function Solucion() {
           <p className="mt-4 text-[15px] leading-relaxed text-muted-foreground sm:text-base">
             Es que nadie puede calcular a mano los recargos nocturnos,
             dominicales y festivos de la ley colombiana sin equivocarse, ni
-            sin regalar sus noches. <span className="font-semibold text-foreground">El Cierre Blindado</span> lo
+            sin regalar sus noches. <span className="font-semibold text-foreground">El Cierre a Prueba de Demandas</span> lo
             hace por ti.
           </p>
         </div>

@@ -1,5 +1,30 @@
 # ESTADO — TurnoCheck
-Última actualización: 2026-07-26 | Sesión actual: 1
+Última actualización: 2026-07-27 | Sesión actual: 1
+
+## Panel de 4 expertos (2026-07-27) — puntajes y qué se ejecutó
+Puntajes: Copy 14/20 · Diseño/Craft 15/20 · Conversión 13/20 · Retención 8/20 · Negocio 12/20.
+Usuario aprobó los 10 hallazgos ("todos"). Ejecutado:
+- ✅ Subtítulo del hero reescrito (era lista de features → ahora nombra el mecanismo + beneficio)
+- ✅ Mecanismo renombrado: "El Cierre Blindado" → **"El Cierre a Prueba de Demandas"** (más ownable,
+  se traza directo al dolor #1 dominante de FICHA-AVATAR — miedo a demandas) en Hero/Solución/Oferta/CtaFinal
+- ✅ Suavizados los claims de "legal" sin validar (Oferta, paywall): "cálculo legal automático" →
+  "cálculo según la ley colombiana"; "respaldo legal" → "respaldo ante cualquier reclamo" — el motor
+  sigue sin validación de abogado (ver "Parámetros legales"), así que el copy ya no promete más de
+  lo que el producto puede sostener
+- ✅ Línea de aversión a la pérdida agregada en Oferta y Paywall (antes el paywall era "todo amable,
+  nada de urgencia" — hallazgo del experto de conversión)
+- ✅ Momento de "reconocimiento" emocional agregado en `StepResultado.tsx` del onboarding (patrón Noom:
+  desculpabiliza antes de vender — "no es que hagas mal las cuentas...")
+- ✅ Loop de retención: pasó de "documentado" a "con gatillo real" — Edge Function `recordatorio-diario`
+  desplegada + programada con pg_cron (9am COT) que avisa por correo al dueño si sus empleados no han
+  marcado. Requiere que el usuario configure `RESEND_API_KEY`/`EMAIL_FROM` como secrets de la Edge
+  Function (`supabase secrets set`) para que efectivamente envíe — sin eso corre pero no manda nada.
+- ⏸️ NO ejecutados (requieren al usuario o son decisión de negocio, no de código): logo genérico
+  (es gusto/identidad del usuario, no se cambia sin su input) · canal de adquisición sin probar
+  (requiere presupuesto y accionar del usuario) · foso competitivo débil (decisión estratégica de
+  producto a mediano plazo, no un fix de código)
+- Sin subagente `revisor-visual` disponible — pantallas tocadas verificadas por observación directa
+  a 375px (screenshots tomados), declarado como autoevaluación, no revisor independiente.
 
 ⏸️ CHECKPOINT — Última acción completada: Auditoría exhaustiva ejecutada y sus hallazgos corregidos —
 backend real conectado (Supabase: schema+RLS+auth+proxy de protección), placeholders del carrusel
@@ -178,13 +203,20 @@ Reporte completo entregado y aprobado ("todo") por el usuario; ejecutado por cap
   tabla de festivos por año (se agrega en Sesión 6 con base de datos real).
 
 ## Pendientes del usuario (acciones que el usuario debe hacer)
+- [ ] ⚠️ CRÍTICO Y REPETIDO 2 VECES: `web/.env.local` → `SUPABASE_SECRET_KEY` sigue siendo la clave
+      de OTRO proyecto de Supabase (verificado 2026-07-27, sin ver el valor completo — solo se comparó
+      a qué proyecto apunta). Hasta que esto no se corrija con la clave real de "turnocheck"
+      (`sb_secret_...` desde https://supabase.com/dashboard/project/dqnznvkyurlsjctnpizb/settings/api-keys,
+      pestaña "API Keys" no "Legacy"), el backend real no funciona pese a que todo el código ya está listo.
 - [ ] Configurar en el dashboard de Supabase (Authentication → URL Configuration): Site URL y Redirect
       URLs (agregar `http://localhost:3000/auth/callback` para dev y la URL de Vercel cuando exista)
       — sin esto el link mágico puede rechazar la redirección.
+- [ ] Activar los recordatorios diarios: `supabase secrets set RESEND_API_KEY=... EMAIL_FROM=...`
+      (proyecto `dqnznvkyurlsjctnpizb`) — la función y el cron ya están desplegados, solo faltan las claves.
 - [ ] Crear el repositorio vacío en GitHub (turnocheck) y darme la URL para el primer push.
 - [ ] Crear cuenta de Vercel para publicar (aún no se ha hecho).
 - [ ] Crear cuenta de Hotmart cuando se llegue a la sesión de venta/cobro real.
-- [ ] Probar el login real con su propio correo de punta a punta (pedir el link, abrirlo, confirmar que crea la empresa).
+- [ ] Probar el login real con su propio correo de punta a punta (pedir el link, abrirlo, confirmar que crea la empresa) — solo posible después de corregir la clave secreta.
 
 ## Notas para la próxima sesión
 - El usuario aportó un documento de investigación propio muy completo (avatar, dolores, deseos, objeciones, MVP, monetización, riesgos) — ya se usó como Reporte de Validación de la Sesión 1.

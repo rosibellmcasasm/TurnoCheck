@@ -29,7 +29,7 @@ const USD_A_COP_APROX = 4000;
 
 const BENEFICIOS = [
   { texto: "Prueba anti-demandas: foto y ubicación en cada marcación", icon: ShieldCheck },
-  { texto: "Cálculo legal automático: extras, nocturnas y festivos de Colombia", icon: Check },
+  { texto: "Cálculo automático según la ley colombiana: extras, nocturnas y festivos", icon: Check },
   { texto: "Reporte en PDF, listo para tu contador por WhatsApp", icon: FileText },
 ];
 
@@ -159,9 +159,13 @@ export default function PaywallPage() {
           </ol>
         </div>
 
+        <p className="mt-5 text-center text-xs text-muted-foreground">
+          Si cierras esta pantalla, el cálculo de {data.nombreNegocio || "tu negocio"} queda sin
+          guardar — y sigues sin respaldo si algo pasa.
+        </p>
         <button
           onClick={() => router.push("/login")}
-          className="mt-6 flex h-13 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground shadow-lg shadow-primary/25"
+          className="mt-3 flex h-13 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground shadow-lg shadow-primary/25"
           style={{ height: 52 }}
         >
           Probar 7 días gratis — $0 hoy <ArrowRight className="h-4 w-4" />
