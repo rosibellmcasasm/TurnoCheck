@@ -16,9 +16,20 @@ function CallbackContenido() {
     const supabase = createClient();
 
     async function completar() {
-      // El link mágico ya dejó la sesión en la URL; el cliente de Supabase
-      // la detecta automáticamente (detectSessionInUrl). Solo esperamos a
-      // que exista el usuario para poder crear su empresa.
+      // El cliente de Supabase (@supabase/ssr) usa flujo PKCE: el link mágico
+      // llega con "?code=" en la URL y hay que cambiarlo por la sesión real
+      // ANTES de pedir el usuario — detectSessionInUrl no alcanza a hacerlo
+      // solo con el código de query (sí funcionaba con el fragmento #access_token
+      // del flujo implícito viejo, pero este proyecto usa PKCE).
+      const code = searchParams.get("code");
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) {
+          setError("El link ya expiró o no es válido. Vuelve a pedir uno nuevo.");
+          return;
+        }
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();

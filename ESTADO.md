@@ -1,6 +1,52 @@
 # ESTADO — TurnoCheck
 Última actualización: 2026-07-27 | Sesión actual: 1
 
+## Bug real encontrado y corregido: el login por magic link nunca creaba sesión (2026-07-27)
+"no pude entrar" del usuario NO era el link vencido (como se pensó las veces anteriores) — era un bug
+real en `app/auth/callback/page.tsx`: el proyecto usa flujo **PKCE** (default de `@supabase/ssr`), así
+que el link mágico llega con `?code=...` en la URL, y hay que cambiarlo por la sesión con
+`supabase.auth.exchangeCodeForSession(code)` ANTES de pedir el usuario. El código viejo solo hacía
+`getUser()` esperando que `detectSessionInUrl` resolviera solo un `#access_token` de flujo implícito
+— que no es el que usa este proyecto — así que SIEMPRE fallaba silenciosamente y mandaba al error
+"link expirado" sin importar que el link fuera válido. Corregido: se agregó el `exchangeCodeForSession`
+al inicio de `completar()`. Verificado en el navegador con un código inválido a propósito → mostró
+el mensaje de error correcto sin crashear (tsc+build limpios). NO se pudo verificar el camino de
+ÉXITO en este entorno (el navegador de este sandbox no puede completar el flujo real de principio a
+fin: el link debe abrirse desde el MISMO navegador que pidió el código, y ese navegador tiene que ser
+el del usuario). Pendiente: que el usuario entre a `/login`, pida el link con su correo real desde
+SU PROPIO navegador (no un link que yo genere), y lo abra desde su bandeja de entrada — ese es el
+único camino que ahora sí debería funcionar de punta a punta.
+
+## Panel de administración /admin (2026-07-27)
+Primera versión, nivel "MVP/primeras ventas" del 21-BACKOFFICE.md (solo secciones Ventas+Usuarios —
+Salud/Uso se agregan cuando haya usuarios reales usando la app, no antes). Usuario confirmó el plan
+("está bien") tras sugerirle yo los 3 defaults (primer número = Usuarios, sin pagos/eventos reales
+todavía, acceso solo su correo).
+- ✅ Ruta `/admin` protegida en DOBLE capa: `proxy.ts` (redirige a `/app` si el correo de sesión no es
+  `ADMIN_EMAIL`) + `app/admin/layout.tsx` (mismo chequeo server-side, por si algo evade el proxy).
+  `ADMIN_EMAIL=rosibellmcasasm@hotmail.com` en `.env.local` (y placeholder vacío en `.env.example`).
+- ✅ `lib/supabase/admin-queries.ts` (`getResumenAdmin`): usa el cliente admin (`admin.ts`, salta RLS
+  a propósito) para juntar companies+subscriptions+employees+auth.users(email) de TODAS las empresas —
+  solo se llama desde `/admin/*`, nunca desde código alcanzable por un usuario normal.
+- ✅ `app/admin/page.tsx`: cards resumen (empresas totales, en trial, activas, altas 7 días) con
+  `AnimatedNumber`, banner de aviso (hoy fijo en "✅ Todo en orden" — no hay disparadores reales
+  todavía: sin Hotmart no hay churn/margen que vigilar, sin error_log no hay errores que contar),
+  card de Ventas HONESTA ("$0 — no medido todavía, se llena sola al conectar Hotmart" en vez de
+  inventar un número), tabla de usuarios (empresa/correo/plan/estado de suscripción/empleados/alta).
+- Verificado con el mismo patrón ya usado en la capa de diseño premium: ruta temporal
+  `/qa-preview-admin-temporal` (reexportaba el componente real de `/admin/page.tsx` sin el guard de
+  login, porque el navegador de este entorno no completa el magic-link real) → screenshot a 375px
+  confirmando el render correcto (0 empresas — dato real y honesto, el usuario de prueba nunca
+  completó el login así que no hay `company` creada aún) → se borró la ruta. tsc+lint+build limpios.
+- Autoevaluación (sin `revisor-visual` disponible, declarado como tal): estructura clara, jerarquía
+  correcta, estados honestos (ningún número inventado), consistente con el resto de `/app/*` (mismos
+  tokens de sombra/color/tipografía). No se pudo verificar visualmente la TABLA con filas reales (el
+  único estado visto fue el vacío) — el código sigue el mismo patrón ya verificado en Reportes/Empleados,
+  pero queda pendiente confirmarlo con al menos una empresa real registrada.
+- ⏸️ NO construido todavía (a propósito, nivel siguiente del backoffice): sección de Salud/Errores
+  (falta tabla `error_log` + Error Boundaries que la alimenten), sección de Uso/Retención (falta
+  `event_log`), LTV/CAC/ganancia real (dependen de datos reales de Hotmart, que no existe aún).
+
 ## Diseño premium / anti-slop — capa de profundidad y movimiento (2026-07-27)
 Diagnóstico (sin subagente `revisor-visual` disponible — autoevaluado y declarado como tal):
 3 violaciones concretas encontradas por grep+lectura de código: (1) cero tokens de sombra en

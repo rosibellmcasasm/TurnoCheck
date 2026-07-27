@@ -30,11 +30,20 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const protegida = request.nextUrl.pathname.startsWith("/app");
+  const protegida = request.nextUrl.pathname.startsWith("/app") || request.nextUrl.pathname.startsWith("/admin");
   if (protegida && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", request.nextUrl.pathname);
+    return NextResponse.redirect(url);
+  }
+
+  // /admin además exige que el correo coincida con ADMIN_EMAIL — el resto de
+  // la verificación (por si alguien intenta pasar sin sesión coincidente) la
+  // hace también app/admin/layout.tsx del lado del servidor, en capa doble.
+  if (request.nextUrl.pathname.startsWith("/admin") && user?.email !== process.env.ADMIN_EMAIL) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/app";
     return NextResponse.redirect(url);
   }
 

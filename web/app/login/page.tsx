@@ -1,19 +1,28 @@
 "use client";
 
 import { useState, type FormEvent, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Mail, ArrowRight, AlertTriangle } from "lucide-react";
+import { Mail, ArrowRight, AlertTriangle, KeyRound } from "lucide-react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
+import { ensureCompany } from "@/lib/supabase/queries";
 
 function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/app";
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Algunos correos (Hotmail/Outlook sobre todo) "abren" el link mágico ellos
+  // solos apenas llega (escaneo de seguridad "Safe Links"), gastando el link
+  // antes de que el usuario le haga clic — por eso ofrecemos también el
+  // código de 6 dígitos que llega en el mismo correo, que nadie puede
+  // "pre-consumir" porque hay que escribirlo a mano.
+  const [codigo, setCodigo] = useState("");
+  const [verificando, setVerificando] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -35,6 +44,32 @@ function LoginForm() {
     setSent(true);
   }
 
+  async function handleVerificarCodigo(e: FormEvent) {
+    e.preventDefault();
+    if (codigo.trim().length < 6) return;
+    setVerificando(true);
+    setError(null);
+    const supabase = createClient();
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token: codigo.trim(),
+      type: "email",
+    });
+    if (error || !data.user) {
+      setVerificando(false);
+      setError("Ese código no es válido o ya venció. Pide uno nuevo.");
+      return;
+    }
+    try {
+      await ensureCompany(supabase, data.user.id);
+    } catch {
+      setVerificando(false);
+      setError("Tu cuenta quedó activa, pero no pudimos guardar tu negocio. Intenta de nuevo.");
+      return;
+    }
+    router.replace(next);
+  }
+
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-6">
       <div className="w-full max-w-sm">
@@ -45,10 +80,49 @@ function LoginForm() {
           </h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
             {sent
-              ? `Te enviamos un link mágico a ${email}. Ábrelo desde tu celular para activar tu cuenta.`
+              ? `Te enviamos un correo a ${email} con un link y un código de 6 dígitos.`
               : "Sin contraseñas. Te enviamos un link a tu correo para entrar."}
           </p>
         </div>
+
+        {sent && (
+          <form onSubmit={handleVerificarCodigo} className="mt-7">
+            <label className="block text-sm font-medium text-foreground">
+              Código de 6 dígitos del correo
+              <div className="relative mt-1.5">
+                <KeyRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoFocus
+                  maxLength={6}
+                  value={codigo}
+                  onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ""))}
+                  placeholder="123456"
+                  className="h-12 w-full rounded-lg border border-border bg-card pl-10 pr-4 text-center text-lg font-semibold tracking-[0.3em] text-foreground outline-none focus:border-primary"
+                />
+              </div>
+            </label>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Si le hiciste clic al link y no funcionó (pasa seguido con Hotmail/Outlook, que
+              revisa los links solo antes de que lo abras), usa mejor este código — es del mismo
+              correo, más abajo del link.
+            </p>
+            {error && (
+              <p className="mt-3 flex items-center gap-1.5 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={verificando || codigo.trim().length < 6}
+              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-60"
+            >
+              {verificando ? "Verificando..." : "Entrar con el código"}
+              {!verificando && <ArrowRight className="h-4 w-4" />}
+            </button>
+          </form>
+        )}
 
         {!sent ? (
           <form onSubmit={handleSubmit} className="mt-7">
