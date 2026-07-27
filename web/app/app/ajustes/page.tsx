@@ -51,7 +51,7 @@ export default function AjustesPage() {
     <div className="px-5 pt-6">
       <h1 className="font-display text-xl font-extrabold text-foreground">Ajustes</h1>
 
-      <div className="mt-5 rounded-2xl border border-border bg-card p-4">
+      <div className="mt-5 rounded-2xl border border-border bg-card p-4 shadow-sm">
         <label className="block text-sm font-medium text-foreground">
           Nombre del negocio
           <input
@@ -67,7 +67,7 @@ export default function AjustesPage() {
         </p>
       </div>
 
-      <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-border bg-card p-4">
+      <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-border bg-card p-4 shadow-sm">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <p className="text-xs leading-snug text-muted-foreground">
           Tus datos y los de tus empleados se guardan de forma segura en la nube,

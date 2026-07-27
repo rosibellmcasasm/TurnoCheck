@@ -1,6 +1,30 @@
 # ESTADO — TurnoCheck
 Última actualización: 2026-07-27 | Sesión actual: 1
 
+## Diseño premium / anti-slop — capa de profundidad y movimiento (2026-07-27)
+Diagnóstico (sin subagente `revisor-visual` disponible — autoevaluado y declarado como tal):
+3 violaciones concretas encontradas por grep+lectura de código: (1) cero tokens de sombra en
+`globals.css`, las 4 pantallas de `/app/*` 100% planas (`border` sin `shadow`) · (2) el dispositivo
+ownable `.sello-verificado` solo se usaba en 1 lugar de toda la app (Garantía de la landing) · (3)
+cero imports de Motion en `/app/*` — sin conteo de cifra héroe, sin stagger, sin tap feedback, sin
+transición entre pestañas. Usuario aprobó el plan de 3 capas, ejecutado:
+- ✅ Sistema de profundidad: `--shadow-sm/md/lg/xl/2xl` redefinidos en `@theme` de `globals.css` con
+  tinte frío multicapa (antes eran los grises genéricos de Tailwind) — aplica automáticamente a TODO
+  `shadow-*` ya usado en el código. Cards de Hoy/Empleados/Reportes/Ajustes ahora con `shadow-sm`,
+  la tarjeta de nómina y el modal con `shadow-md`/`shadow-xl`.
+- ✅ El sello de verificación (`.sello-verificado`) ahora vive en las pantallas reales: fila de
+  asistencia de Hoy y el badge de foto en `StepResultado` del onboarding (antes solo en la landing).
+- ✅ Animaciones baseline agregadas a `/app/*`: `AnimatedNumber` (nuevo componente,
+  `components/app/shell/AnimatedNumber.tsx`) hace contar la cifra de "Nómina de hoy" de 0 a su valor
+  en 700ms · stagger de 35ms en las filas de Hoy · `whileTap` en botones de Empleados · transición
+  fade+slide entre pestañas del panel (`AppPageTransition.tsx`, nuevo, envuelve `{children}` en
+  `app/app/layout.tsx`) · entrada animada del modal "Nuevo empleado".
+- Verificado con una ruta temporal `/qa-preview-temporal` (datos de mentira, sin sesión) porque el
+  navegador de esta sesión no pudo completar el login real para ver `/app` autenticado — se borró
+  apenas se confirmó visualmente el conteo ($0→valor) y el stagger. tsc+lint+build limpios.
+- Autoevaluación de la pantalla "Hoy" (sin revisor independiente disponible): ~37/40 usabilidad,
+  ~18/20 craft — declarado como autoevaluación, no verificado por un revisor con contexto limpio.
+
 ## Panel de 4 expertos (2026-07-27) — puntajes y qué se ejecutó
 Puntajes: Copy 14/20 · Diseño/Craft 15/20 · Conversión 13/20 · Retención 8/20 · Negocio 12/20.
 Usuario aprobó los 10 hallazgos ("todos"). Ejecutado:
@@ -203,11 +227,9 @@ Reporte completo entregado y aprobado ("todo") por el usuario; ejecutado por cap
   tabla de festivos por año (se agrega en Sesión 6 con base de datos real).
 
 ## Pendientes del usuario (acciones que el usuario debe hacer)
-- [ ] ⚠️ CRÍTICO Y REPETIDO 2 VECES: `web/.env.local` → `SUPABASE_SECRET_KEY` sigue siendo la clave
-      de OTRO proyecto de Supabase (verificado 2026-07-27, sin ver el valor completo — solo se comparó
-      a qué proyecto apunta). Hasta que esto no se corrija con la clave real de "turnocheck"
-      (`sb_secret_...` desde https://supabase.com/dashboard/project/dqnznvkyurlsjctnpizb/settings/api-keys,
-      pestaña "API Keys" no "Legacy"), el backend real no funciona pese a que todo el código ya está listo.
+- [x] RESUELTO 2026-07-27: `SUPABASE_SECRET_KEY` corregida al formato/proyecto correcto
+      (`sb_secret_...` de "turnocheck") — verificado con una llamada real a la Admin API
+      (`auth.admin.generateLink`), sin que el agente viera el valor completo de la clave.
 - [ ] Configurar en el dashboard de Supabase (Authentication → URL Configuration): Site URL y Redirect
       URLs (agregar `http://localhost:3000/auth/callback` para dev y la URL de Vercel cuando exista)
       — sin esto el link mágico puede rechazar la redirección.

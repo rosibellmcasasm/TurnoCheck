@@ -58,6 +58,17 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Profundidad — sombras suaves multicapa con tinte frío (FICHA-ARTE.md).
+   Redefine la escala de sombras de Tailwind: todo shadow-sm/md/lg/xl/2xl
+   que ya existe en el código pasa a usar este tinte, sin tocar el markup. */
+@theme {
+  --shadow-sm: 0 1px 2px rgba(23, 30, 44, 0.04), 0 1px 3px rgba(23, 30, 44, 0.03);
+  --shadow-md: 0 2px 4px rgba(23, 30, 44, 0.04), 0 6px 16px rgba(23, 30, 44, 0.06);
+  --shadow-lg: 0 4px 8px rgba(23, 30, 44, 0.05), 0 12px 32px rgba(23, 30, 44, 0.08);
+  --shadow-xl: 0 8px 16px rgba(23, 30, 44, 0.06), 0 20px 48px rgba(23, 30, 44, 0.10);
+  --shadow-2xl: 0 12px 24px rgba(23, 30, 44, 0.08), 0 32px 64px rgba(23, 30, 44, 0.14);
+}
+
 :root {
   color-scheme: light;
 

@@ -107,7 +107,7 @@ export default function ReportesPage() {
             const totalSemana = porEmpleado.reduce((s, x) => s + x.liq.total, 0);
 
             return (
-              <div key={semanaKey} className="rounded-2xl border border-border bg-card p-4">
+              <div key={semanaKey} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-bold text-foreground">
                     Semana {formatearSemana(semanaKey)}

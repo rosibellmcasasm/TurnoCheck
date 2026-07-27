@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "motion/react";
 import { UserPlus, Trash2, X, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -93,12 +94,14 @@ export default function EmpleadosPage() {
     <div className="px-5 pt-6">
       <div className="flex items-center justify-between">
         <h1 className="font-display text-xl font-extrabold text-foreground">Empleados</h1>
-        <button
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          transition={{ duration: 0.12 }}
           onClick={() => (enLimite ? router.push("/paywall") : setAbierto(true))}
           className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
         >
           <UserPlus className="h-4 w-4" /> Agregar
-        </button>
+        </motion.button>
       </div>
 
       <p className="mt-1 text-xs text-muted-foreground">
@@ -128,7 +131,7 @@ export default function EmpleadosPage() {
           {empleados.map((emp) => (
             <div
               key={emp.id}
-              className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5"
+              className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5 shadow-sm"
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-foreground">{emp.nombre}</p>
@@ -148,9 +151,22 @@ export default function EmpleadosPage() {
         </div>
       )}
 
-      {abierto && (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 sm:items-center">
-          <div className="w-full max-w-sm rounded-t-2xl bg-card p-5 sm:rounded-2xl">
+      <AnimatePresence>
+        {abierto && (
+          <motion.div
+            className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 sm:items-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <motion.div
+              className="w-full max-w-sm rounded-t-2xl bg-card p-5 shadow-xl sm:rounded-2xl"
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 24 }}
+              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            >
             <div className="flex items-center justify-between">
               <h2 className="font-display text-base font-bold text-foreground">Nuevo empleado</h2>
               <button onClick={() => setAbierto(false)} aria-label="Cerrar">
@@ -188,16 +204,19 @@ export default function EmpleadosPage() {
               />
             </label>
 
-            <button
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              transition={{ duration: 0.12 }}
               onClick={guardar}
               disabled={nombre.trim().length < 2}
               className="mt-5 flex h-12 w-full items-center justify-center rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-40"
             >
               Guardar empleado
-            </button>
-          </div>
-        </div>
-      )}
+            </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

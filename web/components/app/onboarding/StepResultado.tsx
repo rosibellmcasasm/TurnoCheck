@@ -40,7 +40,7 @@ export function StepResultado({ data, onNext }: { data: OnboardingData; onNext: 
               <MapPin className="h-3 w-3" /> Ubicación verificada
             </p>
           </div>
-          <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-primary text-primary">
+          <span className="sello-verificado flex h-8 w-8 items-center justify-center rounded-full border-2 border-primary text-primary">
             <ShieldCheck className="h-4 w-4" />
           </span>
         </div>

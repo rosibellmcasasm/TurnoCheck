@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { motion } from "motion/react";
 import { Camera, ShieldCheck, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { AnimatedNumber } from "@/components/app/shell/AnimatedNumber";
 import {
   ensureCompany,
   listEmployees,
@@ -97,12 +99,12 @@ export default function HoyPage() {
         Hola, {company.name}
       </h1>
 
-      <div className="mt-4 rounded-2xl bg-primary p-5 text-primary-foreground">
+      <div className="mt-4 rounded-2xl bg-primary p-5 text-primary-foreground shadow-md shadow-primary/20">
         <p className="text-[11px] uppercase tracking-wide opacity-80">
           Nómina de hoy en vivo
         </p>
         <p className="tabular mt-1 text-3xl font-extrabold">
-          ${Math.round(nominaHoy).toLocaleString("es-CO")}
+          $<AnimatedNumber value={nominaHoy} />
         </p>
         <p className="mt-1 text-xs opacity-85">
           {yaMarcaron} de {empleadosActivos.length} empleados ya marcaron
@@ -132,16 +134,28 @@ export default function HoyPage() {
           </Link>
         </div>
       ) : (
-        <div className="mt-3 space-y-2">
+        <motion.div
+          className="mt-3 space-y-2"
+          initial="hidden"
+          animate="show"
+          variants={{ show: { transition: { staggerChildren: 0.035 } } }}
+        >
           {empleadosActivos.map((emp) => {
             const { estado, hora } = estadoDeHoy(emp.id, entradas);
             return (
-              <Link
+              <motion.div
                 key={emp.id}
-                href={`/app/marcar?empleado=${emp.id}`}
-                className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5"
+                variants={{
+                  hidden: { opacity: 0, y: 8 },
+                  show: { opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } },
+                }}
+                whileTap={{ scale: 0.98 }}
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+              <Link
+                href={`/app/marcar?empleado=${emp.id}`}
+                className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5 shadow-sm"
+              >
+                <span className="sello-verificado flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
                   <ShieldCheck className="h-4.5 w-4.5" />
                 </span>
                 <span className="min-w-0 flex-1">
@@ -166,9 +180,10 @@ export default function HoyPage() {
                   </span>
                 )}
               </Link>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       )}
     </div>
   );
