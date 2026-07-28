@@ -23,6 +23,19 @@ const PLANES = {
   pyme: { nombre: "Plan Pyme", hasta: "hasta 15 empleados", mensual: 19.99, anual: 15.99 },
 } as const;
 
+// Links de checkout reales de Hotmart (creados por el usuario 2026-07-28) — uno
+// por combinación de plan × periodo, cada uno con su propio código de oferta.
+const HOTMART_LINKS = {
+  micro: {
+    mensual: "https://pay.hotmart.com/I106924209Y?off=4qqy56fl",
+    anual: "https://pay.hotmart.com/I106924209Y?off=xux8yrd7",
+  },
+  pyme: {
+    mensual: "https://pay.hotmart.com/I106924209Y?off=3ojqn2b8",
+    anual: "https://pay.hotmart.com/I106924209Y?off=sa97egu3",
+  },
+} as const;
+
 // Conversión aproximada solo para referencia visual — el cobro real lo hace Hotmart
 // en la moneda y tasa vigentes al momento del pago (nunca un monto prometido aquí).
 const USD_A_COP_APROX = 4000;
@@ -54,6 +67,7 @@ export default function PaywallPage() {
   const planId = planRecomendado(data.tamanoEquipo);
   const plan = PLANES[planId];
   const precio = anual ? plan.anual : plan.mensual;
+  const checkoutUrl = HOTMART_LINKS[planId][anual ? "anual" : "mensual"];
   const precioCop = Math.round((precio * USD_A_COP_APROX) / 1000) * 1000;
 
   const fechaCobro = new Date();
@@ -163,16 +177,22 @@ export default function PaywallPage() {
           Si cierras esta pantalla, el cálculo de {data.nombreNegocio || "tu negocio"} queda sin
           guardar — y sigues sin respaldo si algo pasa.
         </p>
-        <button
-          onClick={() => router.push("/login")}
+        <a
+          href={checkoutUrl}
           className="mt-3 flex h-13 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground shadow-lg shadow-primary/25"
           style={{ height: 52 }}
         >
           Probar 7 días gratis — $0 hoy <ArrowRight className="h-4 w-4" />
-        </button>
+        </a>
         <p className="mt-2 text-center text-xs text-muted-foreground">
           Cancela cuando quieras, sin contratos ni letra chica.
         </p>
+        <button
+          onClick={() => router.push("/login")}
+          className="mx-auto mt-3 block text-center text-xs text-muted-foreground underline hover:text-foreground"
+        >
+          Ya pagué, iniciar sesión
+        </button>
 
         <div className="mt-6 flex flex-col gap-2 border-t border-border pt-5">
           {CONFIANZA.map((c) => (
