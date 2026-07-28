@@ -1,6 +1,21 @@
 # ESTADO — TurnoCheck
 Última actualización: 2026-07-27 | Sesión actual: 1
 
+## Checkout de Hotmart conectado al paywall (2026-07-28)
+El usuario creó los 4 productos/ofertas en Hotmart y pasó los links reales. Se conectaron en
+`web/app/paywall/page.tsx` (`HOTMART_LINKS`): el botón principal ahora navega al link correcto
+según `planId` (micro/pyme) y el toggle mensual/anual — 4 combinaciones, verificado en navegador
+que el `href` cambia con cada toggle. Se agregó un link secundario "Ya pagué, iniciar sesión" que
+manda a `/login` (antes esa era la única acción del botón principal).
+⚠️ IMPORTANTE — el webhook de Hotmart todavía NO existe (`api/webhooks/hotmart`, ver 18-VENTA-HOTMART.md):
+comprar en Hotmart hoy NO activa ni crea automáticamente la cuenta en Supabase. El usuario paga en
+Hotmart y por separado tiene que entrar por `/login` con el mismo correo. Falta: (1) construir el
+endpoint del webhook con las 4 defensas (firma HOTTOK, validar evento, idempotencia, nunca confiar
+en el payload crudo), (2) `supabase secrets`/env con `HOTMART_HOTTOK`, (3) decidir y documentar el
+matching por email (Modelo 2A ya elegido en Sesión 1 — mitigar el bug de "email distinto" pasando
+`src`/`sck` como tracking del checkout cuando exista el login antes del pago). Sin esto, technically
+alguien podría pagar y no tener acceso automático — anotado para la próxima sesión de venta real.
+
 ## Bug real encontrado y corregido: el login por magic link nunca creaba sesión (2026-07-27)
 "no pude entrar" del usuario NO era el link vencido (como se pensó las veces anteriores) — era un bug
 real en `app/auth/callback/page.tsx`: el proyecto usa flujo **PKCE** (default de `@supabase/ssr`), así
