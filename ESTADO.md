@@ -277,14 +277,29 @@ Reporte completo entregado y aprobado ("todo") por el usuario; ejecutado por cap
       (`sb_secret_...` de "turnocheck") — verificado con una llamada real a la Admin API
       (`auth.admin.generateLink`), sin que el agente viera el valor completo de la clave.
 - [ ] Configurar en el dashboard de Supabase (Authentication → URL Configuration): Site URL y Redirect
-      URLs (agregar `http://localhost:3000/auth/callback` para dev y la URL de Vercel cuando exista)
-      — sin esto el link mágico puede rechazar la redirección.
+      URLs — agregar `http://localhost:3000/auth/callback`, la URL de Vercel cuando exista, Y el
+      dominio propio cuando el usuario lo compre (dijo 2026-07-28 que va a comprar uno — anotar
+      recordatorio: sin este paso el login no funciona en el dominio nuevo).
+- [ ] Editar la plantilla "Magic Link" en Supabase (Authentication → Email Templates): cambiar
+      `<a href="{{ .ConfirmationURL }}">` por
+      `<a href="{{ .SiteURL }}/auth/confirm-click?confirmation_url={{ .ConfirmationURL }}">`.
+      2026-07-28: el usuario pidió que el login siga siendo "solo un link" (sin código escrito) —
+      se reemplazó el código de 6 dígitos por una pantalla intermedia `/auth/confirm-click` con un
+      botón "Iniciar sesión": Hotmail/Outlook puede pre-visitar esa pantalla sin gastar el link real
+      (que solo se consume cuando el usuario hace clic en el botón). Sin este cambio de plantilla,
+      el correo sigue trayendo el link directo de siempre y el problema no se resuelve.
 - [ ] Activar los recordatorios diarios: `supabase secrets set RESEND_API_KEY=... EMAIL_FROM=...`
       (proyecto `dqnznvkyurlsjctnpizb`) — la función y el cron ya están desplegados, solo faltan las claves.
-- [ ] Crear el repositorio vacío en GitHub (turnocheck) y darme la URL para el primer push.
-- [ ] Crear cuenta de Vercel para publicar (aún no se ha hecho).
+- [x] RESUELTO 2026-07-28: repositorio GitHub creado (`github.com/rosibellmcasasm/TurnoCheck`),
+      remoto agregado localmente. PENDIENTE del usuario: correr `git push -u origin master` desde
+      SU propia terminal (el agente no puede — el push pide login interactivo que este entorno no
+      puede abrir).
+- [x] RESUELTO: cuenta de Vercel ya conectada (equipo `rosibellmcasasm-3809's projects`).
+- [ ] Comprar el dominio propio (mencionado 2026-07-28, sin comprar aún) — cuando lo tenga, avisar
+      para conectarlo en Vercel + actualizar Supabase (ver primer punto de esta lista).
 - [ ] Crear cuenta de Hotmart cuando se llegue a la sesión de venta/cobro real.
-- [ ] Probar el login real con su propio correo de punta a punta (pedir el link, abrirlo, confirmar que crea la empresa) — solo posible después de corregir la clave secreta.
+- [ ] Probar el login real con su propio correo de punta a punta usando el CÓDIGO de 6 dígitos (no
+      el link) — pendiente hasta que agregue `{{ .Token }}` a la plantilla de Supabase.
 
 ## Notas para la próxima sesión
 - El usuario aportó un documento de investigación propio muy completo (avatar, dolores, deseos, objeciones, MVP, monetización, riesgos) — ya se usó como Reporte de Validación de la Sesión 1.
