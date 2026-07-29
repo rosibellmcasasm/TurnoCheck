@@ -1,5 +1,65 @@
 # ESTADO — TurnoCheck
-Última actualización: 2026-07-27 | Sesión actual: 1
+Última actualización: 2026-07-28 | Sesión actual: 1
+
+## Webhook de Hotmart construido (2026-07-28)
+Endpoint real en `web/app/api/webhooks/hotmart/route.ts`, siguiendo `docs/sistema/18-VENTA-HOTMART.md`
+("SEGURIDAD DEL WEBHOOK") adaptado al modelo real de la app (companies/subscriptions, no "profiles"):
+- ✅ Migraciones `0006_hotmart_webhook.sql` (tablas `processed_events`+`webhook_log`, función atómica
+  `apply_hotmart_event`, constraint de `subscriptions.status` ampliado a incluir `refunded`/`chargeback`)
+  y `0007_...lock_rpc.sql` (el advisor de seguridad marcó la RPC ejecutable por anon/authenticated —
+  Postgres otorga EXECUTE a PUBLIC por defecto en funciones nuevas; corregido revocando de PUBLIC
+  explícitamente, no solo de anon/authenticated). Ambas aplicadas en el proyecto real y verificadas
+  con `get_advisors` — sin warnings de seguridad nuevos.
+- ✅ `lib/hotmart-verify.ts`: hottok en tiempo constante (`crypto.timingSafeEqual`), nunca `===`.
+- ✅ `lib/hotmart-fsm.ts`: mapea evento Hotmart → estado (`statusForEvent`), bloquea reactivar un
+  reembolso/chargeback con un evento viejo (`canTransition`), y mapea el código de oferta (`off=`)
+  de cada uno de los 4 links ya conectados al plan interno (`planForOfferCode`).
+- ✅ `lib/hotmart-account.ts`: resuelve o crea la cuenta+empresa del comprador por email — si ya
+  existía (hizo onboarding antes de pagar) reutiliza su empresa; si pagó sin loguearse nunca, crea
+  la cuenta de auth (passwordless) + empresa mínima. Nunca un insert ciego (siempre busca primero).
+- ✅ El route handler: lee el raw body, verifica hottok, ventana anti-replay (5 min), idempotencia +
+  transición legal + upsert atómico vía la RPC, loguea TODO intento en `webhook_log`. Fail-secure:
+  si falta `HOTMART_HOTTOK` responde 503 sin procesar nada (se comprueba en cada request, NO al
+  cargar el módulo, para no tumbar el resto del deploy si el secreto aún no está configurado).
+- Verificado: build+lint limpios, lógica de `timingSafeEqualStr` y de `hotmart-fsm.ts` probada con
+  scripts aislados (sin tocar `.env.local` real), `curl` local confirmó el 503 fail-secure (sin
+  `HOTMART_HOTTOK` configurado, que es el estado actual).
+- ⚠️ PLACEHOLDER sin verificar (documentado en el propio código, `hotmart-fsm.ts`): el evento de
+  INICIO de trial se infiere por `price.value === 0` o `subscription.status === 'started'` — Hotmart
+  no confirma el nombre/forma exacta hasta hacer una compra sandbox real con trial y capturar el
+  JSON (Paso F de la guía, obligatorio ANTES de anunciar la venta).
+- ⏸️ NO conectado todavía: el email de bienvenida con Resend (`RESEND_API_KEY` sigue sin configurar)
+  — el acceso SÍ queda activo en la base de datos, pero no se le manda automáticamente el magic
+  link; por ahora el comprador entra por `/login` con el mismo correo.
+- ⏸️ Pendiente del usuario (Paso E de 18-VENTA-HOTMART.md): registrar el webhook en el panel de
+  Hotmart apuntando a `https://turno-check.vercel.app/api/webhooks/hotmart`, elegir los eventos,
+  copiar el HOTTOK a la variable de entorno `HOTMART_HOTTOK` en Vercel (nunca en el chat/repo), y
+  mandar el test. Después: una compra de prueba real de punta a punta (checklist del archivo 18).
+
+## Límite de correo de Supabase (built-in) — 2/hora (2026-07-28)
+El "No pudimos enviar el link" tras varias pruebas de login NO era un bug: el servicio de correo
+por defecto de Supabase (sin SMTP propio conectado) tiene un límite duro de **2 correos/hora**
+(confirmado en supabase.com/docs/guides/auth/rate-limits) — se agotó entre las pruebas del agente y
+las del usuario. El usuario eligió ESPERAR (no configurar Resend todavía). Con SMTP propio (Resend)
+el límite sube a 30/hora (ajustable) — sigue siendo el paso pendiente de siempre, ahora con motivo
+extra: sin esto, probar el login en producción es lento e incómodo. Recomendar conectar Resend
+pronto si las pruebas siguen chocando con el límite.
+
+## Deploy en producción (2026-07-28)
+- ✅ Código subido a GitHub: `github.com/rosibellmcasasm/TurnoCheck` (el usuario corrió el push él
+  mismo desde su terminal — este entorno no puede autenticar con GitHub).
+- ✅ Proyecto importado en Vercel (root directory `web`, las 5 env vars pegadas a mano por el
+  usuario desde su `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+  `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ADMIN_EMAIL`) — deploy exitoso.
+- **URL pública: https://turno-check.vercel.app**
+- ⏸️ PENDIENTE del usuario: agregar esa URL en Supabase → Authentication → URL Configuration
+  (Site URL + Redirect URLs `/auth/callback` y `/auth/confirm-click`) — sin esto el login no
+  funciona en producción, solo en localhost.
+- Nota: el conector MCP de Vercel que se usó en sesiones anteriores para gestionar proyectos se
+  desconectó a mitad de esta sesión — el deploy de hoy lo hizo el usuario a mano desde el dashboard,
+  guiado paso a paso (capturas de pantalla). Si en una sesión futura el conector no está disponible,
+  asumir que todo cambio en Vercel (env vars, redeploys, dominio) requiere guiar al usuario por el
+  dashboard igual que hoy.
 
 ## Checkout de Hotmart conectado al paywall (2026-07-28)
 El usuario creó los 4 productos/ofertas en Hotmart y pasó los links reales. Se conectaron en
