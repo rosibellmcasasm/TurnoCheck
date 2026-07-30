@@ -1,6 +1,46 @@
 # ESTADO — TurnoCheck
 Última actualización: 2026-07-28 | Sesión actual: 1
 
+## Sistema de emails del negocio — Fase 0-3 (2026-07-28)
+Siguiendo el inventario/plan aprobado (transaccionales primero — ver `18-VENTA-HOTMART.md`):
+- ✅ Resend conectado: dominio `turnocheck.app` verificado (DKIM+SPF+DMARC, los 4 registros DNS
+  confirmados en Namecheap y en Resend), API key creada y pegada en Vercel (`RESEND_API_KEY`,
+  `EMAIL_FROM=TurnoCheck <hola@turnocheck.app>`).
+- ✅ Supabase Auth también usa Resend ahora como SMTP propio (Authentication → SMTP Settings) —
+  esto quitó el límite de 2 correos/hora del servicio genérico Y desbloqueó poder editar la
+  plantilla de emails (antes Supabase no dejaba editarla sin SMTP propio).
+- ✅ Plantilla "Magic Link" editada: el link ahora apunta a `/auth/confirm-click` en vez del
+  link directo — completa la mitigación de Hotmail/Outlook (Safe Links) que ya se había construido
+  en el código pero necesitaba este cambio en Supabase para funcionar de punta a punta.
+- ✅ `web/lib/email.ts` (nuevo): `sendWelcomeEmail` (con magic link real generado on-demand),
+  `sendPaymentFailedEmail` (dunning), `sendCancellationEmail` (win-back) — usan el paquete `resend`
+  (agregado a package.json), degradan a `false` sin lanzar si `RESEND_API_KEY` todavía falta (el
+  acceso del usuario NUNCA depende de que el email salga).
+- ✅ Conectados al webhook de Hotmart (`app/api/webhooks/hotmart/route.ts`): bienvenida SOLO en
+  cuenta nueva (`isNewAccount`, nunca en renovaciones), dunning en `past_due`, cancelación en
+  `canceled` — todos SOLO cuando `result === "applied"` (nunca en duplicados/ilegales).
+  tsc+lint+build limpios.
+- ⏸️ PENDIENTE (Fase 4, no ejecutado todavía): prueba end-to-end real — compra de prueba en
+  Hotmart → confirmar que el correo de bienvenida LLEGA (no a spam) → el magic link adentro
+  funciona → entra a `/app`. También falta: `supabase secrets set RESEND_API_KEY=... EMAIL_FROM=...`
+  para que el recordatorio diario (`recordatorio-diario`, Edge Function) empiece a enviar de verdad
+  (usa sus propios secrets de Supabase, separados de las env vars de Vercel).
+- ⏸️ NO construido a propósito (avisado, no a ciegas): carrito abandonado (sin tráfico real
+  todavía para probarlo) y nurturing de lead magnet (no existe lead magnet).
+
+## Dominio propio conectado (2026-07-28)
+- ✅ Usuario compró `turnocheck.app` en Namecheap. Conectado a Vercel (Domains → Add Existing),
+  DNS verificado, HTTPS activo. **Dominio en vivo: https://turnocheck.app** (también responde
+  `www.turnocheck.app`). `turno-check.vercel.app` sigue funcionando como alias secundario.
+- ✅ Supabase actualizado: Site URL → `https://turnocheck.app`, Redirect URLs con `/auth/callback`
+  y `/auth/confirm-click` para el dominio nuevo Y el de `www` (además de las de `turno-check.vercel.app`
+  y `localhost:3000` que ya estaban, sin borrar).
+- ⏸️ PENDIENTE natural ahora que hay dominio propio: conectar Resend con `turnocheck.app` para
+  (a) que los correos salgan de `hola@turnocheck.app` en vez del genérico de Supabase, (b) subir el
+  límite de 2 correos/hora del servicio gratuito de Supabase, y (c) por fin poder editar la plantilla
+  "Magic Link" (Supabase la bloquea para editar sin SMTP propio — ver sección de abajo). El usuario
+  dijo "después" la última vez que se le ofreció — retomar cuando lo pida.
+
 ## Webhook de Hotmart construido (2026-07-28)
 Endpoint real en `web/app/api/webhooks/hotmart/route.ts`, siguiendo `docs/sistema/18-VENTA-HOTMART.md`
 ("SEGURIDAD DEL WEBHOOK") adaptado al modelo real de la app (companies/subscriptions, no "profiles"):

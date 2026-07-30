@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyHotmart } from "@/lib/hotmart-verify";
 import { statusForEvent, planForOfferCode } from "@/lib/hotmart-fsm";
 import { resolveOrCreateCompany } from "@/lib/hotmart-account";
+import { sendWelcomeEmail, sendPaymentFailedEmail, sendCancellationEmail } from "@/lib/email";
 
 export const runtime = "nodejs"; // necesitamos node:crypto y el raw body — no Edge
 
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
     // 6. Resolver (o crear) la cuenta y la empresa del comprador — fuera de
     //    la transacción SQL a propósito (usa la Admin Auth API, no es SQL),
     //    pero es segura ante reintentos: primero busca, solo crea si falta.
-    const { companyId } = await resolveOrCreateCompany(admin, email, name);
+    const { companyId, isNewAccount } = await resolveOrCreateCompany(admin, email, name);
 
     // 7. Idempotencia + transición legal + upsert, todo atómico en la RPC.
     const { data, error } = await admin.rpc("apply_hotmart_event", {
@@ -115,10 +116,19 @@ export async function POST(req: NextRequest) {
       data?.status === "applied" ? "applied" : data?.status === "duplicate" ? "duplicate" : "illegal";
     await admin.from("webhook_log").insert({ event_id: eventId, type: event, result });
 
-    // TODO futuro (no bloquea hoy): enviar el email de bienvenida con Resend
-    // cuando RESEND_API_KEY exista — ver docs/sistema/18-VENTA-HOTMART.md
-    // "EMAILS CON RESEND". Sin Resend configurado, el usuario entra igual
-    // por /login con el mismo correo (el acceso ya quedó activo arriba).
+    // Emails SOLO si de verdad se aplicó el cambio (nunca en duplicados/ilegales).
+    // Si RESEND_API_KEY todavía no existe, estas funciones devuelven false sin
+    // lanzar — el acceso ya quedó activo arriba, el usuario solo pierde el
+    // correo bonito y entra igual por /login con el mismo correo.
+    if (result === "applied") {
+      if (isNewAccount) {
+        await sendWelcomeEmail(email, name);
+      } else if (newStatus === "past_due") {
+        await sendPaymentFailedEmail(email, name);
+      } else if (newStatus === "canceled") {
+        await sendCancellationEmail(email, name);
+      }
+    }
 
     return NextResponse.json({ received: true, result });
   } catch (err) {
