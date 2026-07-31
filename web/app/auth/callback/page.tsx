@@ -22,17 +22,26 @@ function CallbackContenido() {
       // solo con el código de query (sí funcionaba con el fragmento #access_token
       // del flujo implícito viejo, pero este proyecto usa PKCE).
       const code = searchParams.get("code");
+      let user = null;
+
       if (code) {
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-        if (exchangeError) {
+        // Bug real detectado y corregido: antes se volvía a pedir el usuario
+        // con getUser() justo después del exchange, y esa segunda llamada a
+        // veces corría antes de que la sesión terminara de propagarse —
+        // mostraba "link expirado" aunque el login SÍ había funcionado (el
+        // log de Supabase confirmaba un login exitoso). Ahora se usa
+        // directo el user que ya devuelve el propio exchange, sin esa
+        // segunda llamada innecesaria.
+        const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError || !data.user) {
           setError("El link ya expiró o no es válido. Vuelve a pedir uno nuevo.");
           return;
         }
+        user = data.user;
+      } else {
+        const { data } = await supabase.auth.getUser();
+        user = data.user;
       }
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
 
       if (!user) {
         setError("El link ya expiró o no es válido. Vuelve a pedir uno nuevo.");
