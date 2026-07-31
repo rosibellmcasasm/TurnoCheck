@@ -25,19 +25,24 @@ function CallbackContenido() {
       let user = null;
 
       if (code) {
-        // Bug real detectado y corregido: antes se volvía a pedir el usuario
-        // con getUser() justo después del exchange, y esa segunda llamada a
-        // veces corría antes de que la sesión terminara de propagarse —
-        // mostraba "link expirado" aunque el login SÍ había funcionado (el
-        // log de Supabase confirmaba un login exitoso). Ahora se usa
-        // directo el user que ya devuelve el propio exchange, sin esa
-        // segunda llamada innecesaria.
         const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
         if (exchangeError || !data.user) {
-          setError("El link ya expiró o no es válido. Vuelve a pedir uno nuevo.");
-          return;
+          // El exchange puede fallar por "código ya usado" aunque el login
+          // YA haya funcionado de verdad — pasa cuando algo (Outlook/Hotmail
+          // revisando el link una segunda vez, una pestaña duplicada, etc.)
+          // dispara dos peticiones con el mismo código: la primera lo
+          // consume con éxito, la segunda llega tarde y falla. Antes de
+          // declarar error, se revisa si YA existe una sesión activa —
+          // si la hay, fue justamente ese caso, y se deja pasar.
+          const { data: existente } = await supabase.auth.getUser();
+          if (!existente.user) {
+            setError("El link ya expiró o no es válido. Vuelve a pedir uno nuevo.");
+            return;
+          }
+          user = existente.user;
+        } else {
+          user = data.user;
         }
-        user = data.user;
       } else {
         const { data } = await supabase.auth.getUser();
         user = data.user;
