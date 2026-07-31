@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { Camera, ShieldCheck, ChevronRight } from "lucide-react";
+import { Camera, ShieldCheck, ChevronRight, MapPinOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AnimatedNumber } from "@/components/app/shell/AnimatedNumber";
 import {
@@ -30,11 +30,12 @@ function aMarcacion(t: TimeEntry): Marcacion {
 
 function estadoDeHoy(empleadoId: string, entradas: TimeEntry[]) {
   const propias = entradas.filter((e) => e.employee_id === empleadoId);
+  const fueraDeRango = propias.some((e) => e.fuera_de_rango);
   const abierta = propias.find((e) => !e.hora_salida);
-  if (abierta) return { estado: "activo" as const, hora: abierta.hora_entrada.slice(0, 5) };
+  if (abierta) return { estado: "activo" as const, hora: abierta.hora_entrada.slice(0, 5), fueraDeRango };
   const completa = propias[propias.length - 1];
-  if (completa) return { estado: "completo" as const, hora: completa.hora_entrada.slice(0, 5) };
-  return { estado: "pendiente" as const, hora: null };
+  if (completa) return { estado: "completo" as const, hora: completa.hora_entrada.slice(0, 5), fueraDeRango };
+  return { estado: "pendiente" as const, hora: null, fueraDeRango: false };
 }
 
 export default function HoyPage() {
@@ -141,7 +142,7 @@ export default function HoyPage() {
           variants={{ show: { transition: { staggerChildren: 0.035 } } }}
         >
           {empleadosActivos.map((emp) => {
-            const { estado, hora } = estadoDeHoy(emp.id, entradas);
+            const { estado, hora, fueraDeRango } = estadoDeHoy(emp.id, entradas);
             return (
               <motion.div
                 key={emp.id}
@@ -164,6 +165,14 @@ export default function HoyPage() {
                   </span>
                   <span className="block text-xs text-muted-foreground">{emp.cargo}</span>
                 </span>
+                {fueraDeRango && (
+                  <span
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning"
+                    title="Marcó lejos de toda obra registrada"
+                  >
+                    <MapPinOff className="h-3.5 w-3.5" />
+                  </span>
+                )}
                 {estado === "pendiente" && (
                   <span className="flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
                     <Camera className="h-3.5 w-3.5" /> Marcar

@@ -8,13 +8,17 @@ import {
   ensureCompany,
   listEmployees,
   listTimeEntriesForDate,
+  listWorkSites,
   crearMarcacionEntrada,
   marcarSalida,
   type Company,
   type Employee,
   type TimeEntry,
+  type WorkSite,
 } from "@/lib/supabase/queries";
 import { hoyISO, horaAhora } from "@/lib/app-storage";
+import { esFestivoColombia } from "@/lib/festivos-colombia";
+import { dentroDeAlgunSitio } from "@/lib/geo";
 
 type FaseCamara = "cargando-datos" | "cargando" | "lista" | "error" | "capturada";
 type EstadoGeo = "buscando" | "ok" | "error";
@@ -32,8 +36,11 @@ function MarcarContenido() {
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [geo, setGeo] = useState<EstadoGeo>("buscando");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [esFestivo, setEsFestivo] = useState(false);
+  // Se autodetecta con el calendario oficial colombiano al montar — el dueño
+  // puede ajustarlo igual (ej. un festivo local que la ley nacional no cubre).
+  const [esFestivo, setEsFestivo] = useState(() => esFestivoColombia(new Date()));
   const [guardando, setGuardando] = useState(false);
+  const [sitios, setSitios] = useState<WorkSite[]>([]);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
@@ -48,14 +55,16 @@ function MarcarContenido() {
       } = await supabase.auth.getUser();
       if (!user) return;
       const empresa = await ensureCompany(supabase, user.id);
-      const [emps, hoy] = await Promise.all([
+      const [emps, hoy, sitiosTrabajo] = await Promise.all([
         listEmployees(supabase, empresa.id),
         listTimeEntriesForDate(supabase, empresa.id, hoyISO()),
+        listWorkSites(supabase, empresa.id),
       ]);
       setUserId(user.id);
       setCompany(empresa);
       setEmpleado(emps.find((e) => e.id === empleadoId) ?? null);
       setTurnoAbierto(hoy.find((e) => e.employee_id === empleadoId && !e.hora_salida) ?? null);
+      setSitios(sitiosTrabajo.filter((s) => s.activo));
       setFase("cargando");
     })();
   }, [empleadoId]);
@@ -135,6 +144,7 @@ function MarcarContenido() {
         foto_url: fotoUrl,
         lat: coords?.lat,
         lng: coords?.lng,
+        fuera_de_rango: coords ? !dentroDeAlgunSitio(coords, sitios) : false,
       });
     } else if (turnoAbierto) {
       await marcarSalida(supabase, turnoAbierto.id, horaAhora());
@@ -212,16 +222,28 @@ function MarcarContenido() {
           </div>
         )}
 
-        <div className="mt-4 flex items-center gap-2 rounded-xl bg-card px-4 py-3 text-sm">
-          <MapPin
-            className={`h-4 w-4 shrink-0 ${geo === "ok" ? "text-success" : "text-muted-foreground"}`}
-          />
-          <span className="text-foreground">
-            {geo === "buscando" && "Buscando tu ubicación..."}
-            {geo === "ok" && "Ubicación verificada"}
-            {geo === "error" && "No pudimos confirmar tu ubicación (puedes continuar igual)"}
-          </span>
-        </div>
+        {(() => {
+          const fueraDeRango = geo === "ok" && coords ? !dentroDeAlgunSitio(coords, sitios) : false;
+          return (
+            <div
+              className={`mt-4 flex items-center gap-2 rounded-xl px-4 py-3 text-sm ${
+                fueraDeRango ? "bg-warning-soft" : "bg-card"
+              }`}
+            >
+              <MapPin
+                className={`h-4 w-4 shrink-0 ${
+                  fueraDeRango ? "text-warning" : geo === "ok" ? "text-success" : "text-muted-foreground"
+                }`}
+              />
+              <span className={fueraDeRango ? "text-warning" : "text-foreground"}>
+                {geo === "buscando" && "Buscando tu ubicación..."}
+                {geo === "ok" && !fueraDeRango && "Ubicación verificada"}
+                {geo === "ok" && fueraDeRango && "⚠️ Lejos de toda obra registrada"}
+                {geo === "error" && "No pudimos confirmar tu ubicación (puedes continuar igual)"}
+              </span>
+            </div>
+          );
+        })()}
 
         {tipo === "entrada" && (
           <label className="mt-3 flex items-center gap-2 px-1 text-sm text-foreground">
@@ -232,6 +254,7 @@ function MarcarContenido() {
               className="h-4 w-4 rounded border-border accent-primary"
             />
             Hoy es festivo en Colombia
+            <span className="text-xs text-muted-foreground">(detectado automático, ajústalo si hace falta)</span>
           </label>
         )}
 

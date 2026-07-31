@@ -35,6 +35,18 @@ export interface TimeEntry {
   foto_url: string | null;
   lat: number | null;
   lng: number | null;
+  fuera_de_rango: boolean;
+  created_at: string;
+}
+
+export interface WorkSite {
+  id: string;
+  owner_id: string;
+  company_id: string;
+  nombre: string;
+  lat: number;
+  lng: number;
+  activo: boolean;
   created_at: string;
 }
 
@@ -169,6 +181,7 @@ export async function crearMarcacionEntrada(
     foto_url?: string;
     lat?: number;
     lng?: number;
+    fuera_de_rango?: boolean;
   },
 ) {
   const { data, error } = await supabase
@@ -190,5 +203,40 @@ export async function marcarSalida(supabase: SupabaseClient, timeEntryId: string
 
 export async function updateCompanyName(supabase: SupabaseClient, companyId: string, name: string) {
   const { error } = await supabase.from("companies").update({ name }).eq("id", companyId);
+  if (error) throw error;
+}
+
+export async function listWorkSites(supabase: SupabaseClient, companyId: string) {
+  const { data, error } = await supabase
+    .from("work_sites")
+    .select("*")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data as WorkSite[];
+}
+
+export async function createWorkSite(
+  supabase: SupabaseClient,
+  userId: string,
+  companyId: string,
+  input: { nombre: string; lat: number; lng: number },
+) {
+  const { data, error } = await supabase
+    .from("work_sites")
+    .insert({ owner_id: userId, company_id: companyId, ...input })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as WorkSite;
+}
+
+export async function toggleWorkSiteActivo(supabase: SupabaseClient, siteId: string, activo: boolean) {
+  const { error } = await supabase.from("work_sites").update({ activo }).eq("id", siteId);
+  if (error) throw error;
+}
+
+export async function deleteWorkSite(supabase: SupabaseClient, siteId: string) {
+  const { error } = await supabase.from("work_sites").delete().eq("id", siteId);
   if (error) throw error;
 }

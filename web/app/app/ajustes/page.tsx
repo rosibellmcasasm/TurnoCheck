@@ -1,16 +1,34 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LogOut, ShieldCheck } from "lucide-react";
+import { LogOut, ShieldCheck, MapPin, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { ensureCompany, updateCompanyName, type Company } from "@/lib/supabase/queries";
+import {
+  ensureCompany,
+  updateCompanyName,
+  listWorkSites,
+  createWorkSite,
+  toggleWorkSiteActivo,
+  deleteWorkSite,
+  type Company,
+  type WorkSite,
+} from "@/lib/supabase/queries";
 
 export default function AjustesPage() {
   const router = useRouter();
   const [company, setCompany] = useState<Company | null>(null);
   const [nombre, setNombre] = useState("");
   const [cargando, setCargando] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [sitios, setSitios] = useState<WorkSite[]>([]);
+  const [nombreSitio, setNombreSitio] = useState("");
+  const [capturando, setCapturando] = useState(false);
+  const [errorSitio, setErrorSitio] = useState<string | null>(null);
+
+  async function cargarSitios(supabase: ReturnType<typeof createClient>, companyId: string) {
+    setSitios(await listWorkSites(supabase, companyId));
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -20,8 +38,10 @@ export default function AjustesPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
       const empresa = await ensureCompany(supabase, user.id);
+      setUserId(user.id);
       setCompany(empresa);
       setNombre(empresa.name);
+      await cargarSitios(supabase, empresa.id);
       setCargando(false);
     })();
   }, []);
@@ -30,6 +50,44 @@ export default function AjustesPage() {
     if (!company) return;
     const supabase = createClient();
     await updateCompanyName(supabase, company.id, nombre);
+  }
+
+  function agregarSitio() {
+    if (!company || !userId || nombreSitio.trim().length < 2) return;
+    setErrorSitio(null);
+    setCapturando(true);
+    navigator.geolocation?.getCurrentPosition(
+      async (pos) => {
+        const supabase = createClient();
+        await createWorkSite(supabase, userId, company.id, {
+          nombre: nombreSitio.trim(),
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+        setNombreSitio("");
+        setCapturando(false);
+        await cargarSitios(supabase, company.id);
+      },
+      () => {
+        setCapturando(false);
+        setErrorSitio("No pudimos obtener tu ubicación. Revisa los permisos del navegador.");
+      },
+      { timeout: 8000 },
+    );
+  }
+
+  async function cambiarActivo(site: WorkSite) {
+    if (!company) return;
+    const supabase = createClient();
+    await toggleWorkSiteActivo(supabase, site.id, !site.activo);
+    await cargarSitios(supabase, company.id);
+  }
+
+  async function eliminarSitio(siteId: string) {
+    if (!company) return;
+    const supabase = createClient();
+    await deleteWorkSite(supabase, siteId);
+    await cargarSitios(supabase, company.id);
   }
 
   async function salir() {
@@ -65,6 +123,60 @@ export default function AjustesPage() {
           Plan actual: <span className="font-medium text-foreground">{company.plan === "pyme" ? "Pyme" : "Micro"}</span>{" "}
           · hasta {company.plan_empleados_limite} empleados
         </p>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <h2 className="font-display text-sm font-bold text-foreground">Sitios de trabajo</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Regístralos parado en el lugar (útil si tu negocio trabaja por obras o proyectos que
+          cambian de sitio). Cuando alguien marca, la app avisa si está lejos de TODOS los
+          sitios activos.
+        </p>
+
+        {sitios.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {sitios.map((s) => (
+              <div key={s.id} className="flex items-center gap-2 rounded-lg border border-border bg-background p-2.5">
+                <MapPin className={`h-4 w-4 shrink-0 ${s.activo ? "text-primary" : "text-muted-foreground"}`} />
+                <span className={`min-w-0 flex-1 truncate text-sm ${s.activo ? "text-foreground" : "text-muted-foreground line-through"}`}>
+                  {s.nombre}
+                </span>
+                <button
+                  onClick={() => cambiarActivo(s)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    s.activo ? "bg-success-soft text-success" : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {s.activo ? "Activo" : "Inactivo"}
+                </button>
+                <button
+                  onClick={() => eliminarSitio(s.id)}
+                  aria-label={`Eliminar ${s.nombre}`}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-3 flex gap-2">
+          <input
+            value={nombreSitio}
+            onChange={(e) => setNombreSitio(e.target.value)}
+            placeholder="Ej: Obra Calle 80"
+            className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary"
+          />
+          <button
+            onClick={agregarSitio}
+            disabled={capturando || nombreSitio.trim().length < 2}
+            className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            <Plus className="h-3.5 w-3.5" /> {capturando ? "Ubicando..." : "Guardar aquí"}
+          </button>
+        </div>
+        {errorSitio && <p className="mt-2 text-xs text-destructive">{errorSitio}</p>}
       </div>
 
       <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-border bg-card p-4 shadow-sm">
