@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { LogIn, AlertTriangle } from "lucide-react";
 import { motion } from "motion/react";
@@ -19,6 +19,23 @@ import { motion } from "motion/react";
 function ConfirmClickContenido() {
   const [destino, setDestino] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  const [yaClickeado, setYaClickeado] = useState(false);
+  // Ref (no state) para bloquear un segundo clic de forma SÍNCRONA — el link
+  // real de Supabase es de un solo uso, y un doble-toque (o un tap accidental
+  // repetido) reenvía la misma petición con el token ya gastado, mostrando
+  // "link expirado" aunque el primer clic sí haya entrado. Con state a secas
+  // no alcanza: el re-render puede no completarse antes de que la navegación
+  // del primer clic ya haya empezado a desmontar la página.
+  const clickeadoRef = useRef(false);
+
+  function handleClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (clickeadoRef.current || !destino) {
+      e.preventDefault();
+      return;
+    }
+    clickeadoRef.current = true;
+    setYaClickeado(true);
+  }
 
   useEffect(() => {
     const marcador = "confirmation_url=";
@@ -70,12 +87,15 @@ function ConfirmClickContenido() {
       </div>
       <motion.a
         href={destino ?? "#"}
+        onClick={handleClick}
         whileTap={{ scale: 0.97 }}
         transition={{ duration: 0.12 }}
-        aria-disabled={!destino}
-        className="mt-2 flex h-12 w-full max-w-xs items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-60"
+        aria-disabled={!destino || yaClickeado}
+        className={`mt-2 flex h-12 w-full max-w-xs items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground ${
+          yaClickeado ? "pointer-events-none opacity-60" : ""
+        }`}
       >
-        <LogIn className="h-4 w-4" /> Iniciar sesión
+        <LogIn className="h-4 w-4" /> {yaClickeado ? "Entrando..." : "Iniciar sesión"}
       </motion.a>
     </div>
   );
