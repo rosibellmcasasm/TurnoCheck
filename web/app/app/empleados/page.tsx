@@ -26,6 +26,7 @@ export default function EmpleadosPage() {
   const [cargo, setCargo] = useState("");
   const [salario, setSalario] = useState("");
   const [horaEntrada, setHoraEntrada] = useState("");
+  const [horaSalida, setHoraSalida] = useState("");
 
   async function cargar() {
     const supabase = createClient();
@@ -68,11 +69,13 @@ export default function EmpleadosPage() {
       cargo: cargo.trim() || "Sin cargo",
       salario_mensual: Number(salario) || 1_423_500,
       hora_entrada_esperada: horaEntrada || null,
+      hora_salida_esperada: horaSalida || null,
     });
     setNombre("");
     setCargo("");
     setSalario("");
     setHoraEntrada("");
+    setHoraSalida("");
     setAbierto(false);
     await cargar();
   }
@@ -141,6 +144,7 @@ export default function EmpleadosPage() {
                 <p className="text-xs text-muted-foreground">
                   {emp.cargo} · ${emp.salario_mensual.toLocaleString("es-CO")}/mes
                   {emp.hora_entrada_esperada && ` · Entra ${emp.hora_entrada_esperada.slice(0, 5)}`}
+                  {emp.hora_salida_esperada && ` · Sale ${emp.hora_salida_esperada.slice(0, 5)}`}
                 </p>
               </div>
               <button
@@ -219,6 +223,15 @@ export default function EmpleadosPage() {
                 Si la dejas vacía, no calificamos si llegó a tiempo (útil para horarios que
                 cambian, como obra por proyectos).
               </span>
+            </label>
+            <label className="mt-3 block text-sm font-medium text-foreground">
+              Hora de salida esperada (opcional)
+              <input
+                type="time"
+                value={horaSalida}
+                onChange={(e) => setHoraSalida(e.target.value)}
+                className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
+              />
             </label>
 
             <motion.button

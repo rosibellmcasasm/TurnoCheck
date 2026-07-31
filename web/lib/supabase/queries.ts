@@ -20,6 +20,7 @@ export interface Employee {
   cargo: string | null;
   salario_mensual: number;
   hora_entrada_esperada: string | null;
+  hora_salida_esperada: string | null;
   activo: boolean;
   created_at: string;
 }
@@ -127,7 +128,13 @@ export async function createEmployee(
   supabase: SupabaseClient,
   userId: string,
   companyId: string,
-  input: { nombre: string; cargo: string; salario_mensual: number; hora_entrada_esperada?: string | null },
+  input: {
+    nombre: string;
+    cargo: string;
+    salario_mensual: number;
+    hora_entrada_esperada?: string | null;
+    hora_salida_esperada?: string | null;
+  },
 ) {
   const { data, error } = await supabase
     .from("employees")

@@ -33,10 +33,19 @@ function estadoDeHoy(empleadoId: string, entradas: TimeEntry[]) {
   const propias = entradas.filter((e) => e.employee_id === empleadoId);
   const fueraDeRango = propias.some((e) => e.fuera_de_rango);
   const abierta = propias.find((e) => !e.hora_salida);
-  if (abierta) return { estado: "activo" as const, hora: abierta.hora_entrada.slice(0, 5), fueraDeRango };
+  if (abierta) {
+    return { estado: "activo" as const, hora: abierta.hora_entrada.slice(0, 5), horaSalida: null, fueraDeRango };
+  }
   const completa = propias[propias.length - 1];
-  if (completa) return { estado: "completo" as const, hora: completa.hora_entrada.slice(0, 5), fueraDeRango };
-  return { estado: "pendiente" as const, hora: null, fueraDeRango: false };
+  if (completa) {
+    return {
+      estado: "completo" as const,
+      hora: completa.hora_entrada.slice(0, 5),
+      horaSalida: completa.hora_salida ? completa.hora_salida.slice(0, 5) : null,
+      fueraDeRango,
+    };
+  }
+  return { estado: "pendiente" as const, hora: null, horaSalida: null, fueraDeRango: false };
 }
 
 export default function HoyPage() {
@@ -143,8 +152,11 @@ export default function HoyPage() {
           variants={{ show: { transition: { staggerChildren: 0.035 } } }}
         >
           {empleadosActivos.map((emp) => {
-            const { estado, hora, fueraDeRango } = estadoDeHoy(emp.id, entradas);
+            const { estado, hora, horaSalida, fueraDeRango } = estadoDeHoy(emp.id, entradas);
             const puntualidad = hora ? calcularPuntualidad(emp.hora_entrada_esperada, hora) : null;
+            const puntualidadSalida = horaSalida
+              ? calcularPuntualidad(emp.hora_salida_esperada, horaSalida)
+              : null;
             return (
               <motion.div
                 key={emp.id}
@@ -195,8 +207,17 @@ export default function HoyPage() {
                   </span>
                 )}
                 {estado === "completo" && (
-                  <span className="flex items-center gap-0.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-semibold text-success">
-                    Completo <ChevronRight className="h-3 w-3" />
+                  <span className="flex flex-col items-end gap-1">
+                    <span className="flex items-center gap-0.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-semibold text-success">
+                      Completo <ChevronRight className="h-3 w-3" />
+                    </span>
+                    {puntualidadSalida && puntualidadSalida.estado !== "a_tiempo" && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {puntualidadSalida.estado === "temprano"
+                          ? `Salió ${puntualidadSalida.minutos}m antes`
+                          : `Salió ${puntualidadSalida.minutos}m después`}
+                      </span>
+                    )}
                   </span>
                 )}
               </Link>
