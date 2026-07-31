@@ -25,6 +25,7 @@ export default function EmpleadosPage() {
   const [nombre, setNombre] = useState("");
   const [cargo, setCargo] = useState("");
   const [salario, setSalario] = useState("");
+  const [horaEntrada, setHoraEntrada] = useState("");
 
   async function cargar() {
     const supabase = createClient();
@@ -66,10 +67,12 @@ export default function EmpleadosPage() {
       nombre: nombre.trim(),
       cargo: cargo.trim() || "Sin cargo",
       salario_mensual: Number(salario) || 1_423_500,
+      hora_entrada_esperada: horaEntrada || null,
     });
     setNombre("");
     setCargo("");
     setSalario("");
+    setHoraEntrada("");
     setAbierto(false);
     await cargar();
   }
@@ -137,6 +140,7 @@ export default function EmpleadosPage() {
                 <p className="truncate text-sm font-semibold text-foreground">{emp.nombre}</p>
                 <p className="text-xs text-muted-foreground">
                   {emp.cargo} · ${emp.salario_mensual.toLocaleString("es-CO")}/mes
+                  {emp.hora_entrada_esperada && ` · Entra ${emp.hora_entrada_esperada.slice(0, 5)}`}
                 </p>
               </div>
               <button
@@ -202,6 +206,19 @@ export default function EmpleadosPage() {
                 placeholder="1.423.500"
                 className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
               />
+            </label>
+            <label className="mt-3 block text-sm font-medium text-foreground">
+              Hora de entrada esperada (opcional)
+              <input
+                type="time"
+                value={horaEntrada}
+                onChange={(e) => setHoraEntrada(e.target.value)}
+                className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
+              />
+              <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                Si la dejas vacía, no calificamos si llegó a tiempo (útil para horarios que
+                cambian, como obra por proyectos).
+              </span>
             </label>
 
             <motion.button

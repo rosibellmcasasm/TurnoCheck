@@ -1,5 +1,53 @@
 # ESTADO — TurnoCheck
-Última actualización: 2026-07-28 | Sesión actual: 1
+Última actualización: 2026-07-31 | Sesión actual: 1
+
+## Puntualidad por empleado (2026-07-31)
+Caso real: cada negocio (y cada empleado) puede tener un horario distinto — no una regla única
+por empresa. Tolerancia acordada con el usuario: ±5 minutos = "a tiempo".
+- ✅ `employees.hora_entrada_esperada` (migración `0009`, opcional) — se define al crear el
+  empleado, en Empleados. Sin ella, no se califica llegada (no inventa tardanza para horarios
+  flexibles, ej. obra civil).
+- ✅ `lib/puntualidad.ts`: compara hora real vs esperada con la tolerancia de 5 min → temprano /
+  a tiempo / tarde (+minutos). Mostrado en Hoy junto a "Entró {hora}" (rojo si tarde).
+- tsc+lint+build limpios, lógica verificada con 5 casos de prueba (a tiempo por debajo y por
+  encima de la tolerancia, tarde, temprano, sin hora asignada).
+
+## Login por magic link: 3 bugs reales encontrados y corregidos (2026-07-30/31)
+El usuario reportó "se dañó" varias veces seguidas tras cada arreglo — cada vez resultó ser un
+bug DISTINTO, no el mismo repetido. Los 3, diagnosticados con los logs de Auth de Supabase
+(`/logs/auth-logs`, clave para ver el `msg`/`error` real en vez de adivinar):
+1. `confirm-click` no decodificaba el `confirmation_url` de la query string (%3A, %2F sin
+   decodificar) → el navegador lo trataba como ruta relativa rota → 404 en vez del login real.
+   Fix: `decodeURIComponent` antes de usarlo como href.
+2. `/auth/callback` pedía el usuario con `getUser()` justo después del exchange en vez de usar
+   el `user` que el propio `exchangeCodeForSession` ya devuelve — carrera de tiempos que a veces
+   mostraba "link expirado" en logins que SÍ habían funcionado (confirmado: log de Supabase con
+   login exitoso mientras la UI mostraba error).
+3. El botón "Iniciar sesión" de `confirm-click` no estaba protegido contra doble-clic/doble-toque
+   — un segundo click reenviaba el mismo código ya consumido por el primero, y Supabase respondía
+   "ya expiró" aunque el primer intento hubiera entrado bien. Fix: bloqueo síncrono con useRef
+   (un state solo no alcanza a tiempo) + mostrar "Entrando..." tras el primer clic. Además, como
+   redundancia, `/auth/callback` ahora revisa si YA hay sesión activa antes de declarar error.
+- Lección para la próxima vez que alguien reporte "se dañó" en este flujo: SIEMPRE pedir el log
+  de `/logs/auth-logs` de Supabase antes de adivinar — cada vez reveló la causa real en segundos.
+
+## Festivos de Colombia automáticos + geocerca multi-sitio (2026-07-31)
+Caso real del usuario: su negocio (obra civil) no tiene un solo local fijo — el sitio de trabajo
+cambia de proyecto en proyecto. Ajustado el diseño de geocerca para eso, no un solo punto fijo:
+- ✅ `lib/festivos-colombia.ts`: calcula los festivos oficiales de Colombia para CUALQUIER año
+  (fijos + los que la Ley Emiliani mueve al lunes + Semana Santa vía cálculo de Pascua/Gauss) —
+  verificado a mano contra el calendario oficial 2026 (Jueves/Viernes Santo 2-3 abr, etc., todo
+  coincide). Reemplaza el checkbox 100% manual en Marcar — ahora se autodetecta, sigue ajustable.
+- ✅ `lib/geo.ts` + tabla `work_sites` (migración `0008`): geocerca con MÚLTIPLES sitios activos
+  a la vez, no uno solo. En Ajustes, sección "Sitios de trabajo" — se registran parado en el
+  lugar (botón de GPS), se pueden activar/desactivar (para obras terminadas) o borrar. Al marcar,
+  se valida contra CUALQUIER sitio activo (radio 150m) — sin sitios registrados, no penaliza a
+  nadie (negocios de local fijo que no configuren nada no se ven afectados). Aviso visible
+  "⚠️ Lejos de toda obra registrada" en Marcar y un ícono de aviso en la fila de Hoy.
+- ✅ Cada empleado YA tenía salario individual desde antes (`empleados` → campo "Salario mensual")
+  — el usuario preguntó por esto pero ya estaba resuelto, solo se le explicó dónde está.
+- tsc+lint+build limpios, verificado visualmente con datos de ejemplo a 375px (ruta temporal
+  borrada tras confirmar). Migración aplicada y revisada con `get_advisors` — sin warnings nuevos.
 
 ## Sistema de emails del negocio — Fase 0-3 (2026-07-28)
 Siguiendo el inventario/plan aprobado (transaccionales primero — ver `18-VENTA-HOTMART.md`):

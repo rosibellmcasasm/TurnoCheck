@@ -16,6 +16,7 @@ import {
 } from "@/lib/supabase/queries";
 import { desglosarMarcacion, type Marcacion } from "@/lib/nomina";
 import { hoyISO } from "@/lib/app-storage";
+import { calcularPuntualidad } from "@/lib/puntualidad";
 
 function aMarcacion(t: TimeEntry): Marcacion {
   return {
@@ -143,6 +144,7 @@ export default function HoyPage() {
         >
           {empleadosActivos.map((emp) => {
             const { estado, hora, fueraDeRango } = estadoDeHoy(emp.id, entradas);
+            const puntualidad = hora ? calcularPuntualidad(emp.hora_entrada_esperada, hora) : null;
             return (
               <motion.div
                 key={emp.id}
@@ -179,8 +181,17 @@ export default function HoyPage() {
                   </span>
                 )}
                 {estado === "activo" && (
-                  <span className="rounded-full bg-warning-soft px-2.5 py-1 text-xs font-semibold text-warning">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      puntualidad?.estado === "tarde"
+                        ? "bg-destructive/10 text-destructive"
+                        : "bg-warning-soft text-warning"
+                    }`}
+                  >
                     Entró {hora}
+                    {puntualidad?.estado === "tarde" && ` · Tarde ${puntualidad.minutos}m`}
+                    {puntualidad?.estado === "a_tiempo" && " · A tiempo"}
+                    {puntualidad?.estado === "temprano" && " · Temprano"}
                   </span>
                 )}
                 {estado === "completo" && (
