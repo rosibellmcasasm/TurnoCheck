@@ -33,7 +33,16 @@ function ConfirmClickContenido() {
     // Se toma todo lo que sigue tal cual (no con URLSearchParams): el link
     // real tiene sus propios "&" internos que romperían un parseo normal
     // de query params, ya que "confirmation_url" es siempre el último.
-    setDestino(window.location.search.slice(i + marcador.length));
+    // decodeURIComponent es obligatorio: la cadena viene tal como llegó por
+    // la URL (con %3A, %2F, etc.) — sin decodificar, el navegador no la
+    // reconoce como una URL absoluta y la trata como una ruta relativa
+    // rota (bug real detectado: terminaba en /auth/https%3a%2f%2f...).
+    const crudo = window.location.search.slice(i + marcador.length);
+    try {
+      setDestino(decodeURIComponent(crudo));
+    } catch {
+      setError(true);
+    }
   }, []);
 
   if (error) {
