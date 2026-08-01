@@ -113,14 +113,33 @@ function MarcarContenido() {
     };
   }, [fase]);
 
-  function capturar() {
-    const video = videoRef.current;
-    if (!video) return;
+  /** Brillo promedio 0-255 de un canvas, muestreando ~300 píxeles (no los
+   *   300k+ del frame completo — de sobra para detectar un frame negro). */
+  function brilloPromedio(canvas: HTMLCanvasElement): number {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return 255; // sin forma de medir → no bloquear la captura
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const muestras = 300;
+    const paso = Math.max(4, Math.floor(data.length / 4 / muestras) * 4);
+    let suma = 0;
+    let n = 0;
+    for (let i = 0; i < data.length; i += paso) {
+      suma += (data[i] + data[i + 1] + data[i + 2]) / 3;
+      n++;
+    }
+    return n > 0 ? suma / n : 255;
+  }
+
+  function dibujarFrame(video: HTMLVideoElement): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth || 375;
     canvas.height = video.videoHeight || 375;
     const ctx = canvas.getContext("2d");
     ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+
+  function finalizarCaptura(canvas: HTMLCanvasElement) {
     canvas.toBlob(
       (blob) => {
         if (blob) {
@@ -133,6 +152,25 @@ function MarcarContenido() {
     );
     streamRef.current?.getTracks().forEach((t) => t.stop());
     setFase("capturada");
+  }
+
+  /** Bug real corregido: en algunos celulares la cámara sigue ajustando
+   *  exposición/balance de blancos justo después de abrirse (aunque el
+   *  video YA tenga un frame técnicamente disponible), y ese primer frame
+   *  sale casi negro. Si el brillo promedio es sospechosamente bajo, se
+   *  reintenta la captura desde el video (que sigue en vivo) unas pocas
+   *  veces antes de darla por buena — sin que el usuario note nada. */
+  function capturar(intento = 0) {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = dibujarFrame(video);
+    const UMBRAL_NEGRO = 12;
+    const MAX_INTENTOS = 4;
+    if (brilloPromedio(canvas) < UMBRAL_NEGRO && intento < MAX_INTENTOS) {
+      setTimeout(() => capturar(intento + 1), 250);
+      return;
+    }
+    finalizarCaptura(canvas);
   }
 
   async function confirmar() {
@@ -280,7 +318,7 @@ function MarcarContenido() {
         <div className="mt-auto pt-5">
           {fase === "lista" && (
             <button
-              onClick={capturar}
+              onClick={() => capturar()}
               className="flex h-13 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground"
               style={{ height: 52 }}
             >
