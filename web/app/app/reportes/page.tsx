@@ -3,8 +3,61 @@
 import { useEffect, useState } from "react";
 import { Info, FileDown } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { ensureCompany, listEmployees, listTimeEntriesInRange, type Employee, type TimeEntry } from "@/lib/supabase/queries";
-import { agruparPorSemana, liquidarSemana, type Marcacion } from "@/lib/nomina";
+import {
+  ensureCompany,
+  listEmployees,
+  listTimeEntriesInRange,
+  type Company,
+  type Employee,
+  type TimeEntry,
+} from "@/lib/supabase/queries";
+import { agruparPorSemana, liquidarSemana, type LiquidacionSemana, type Marcacion } from "@/lib/nomina";
+
+async function descargarPdfSemana(
+  nombreNegocio: string,
+  rangoTexto: string,
+  totalSemana: number,
+  porEmpleado: { emp: Employee; liq: LiquidacionSemana }[],
+) {
+  const { jsPDF } = await import("jspdf");
+  const autoTable = (await import("jspdf-autotable")).default;
+
+  const doc = new jsPDF();
+  const cop = (n: number) => `$${Math.round(n).toLocaleString("es-CO")}`;
+
+  doc.setFontSize(16);
+  doc.text(nombreNegocio, 14, 18);
+  doc.setFontSize(11);
+  doc.setTextColor(100);
+  doc.text(`Reporte de nómina — semana ${rangoTexto}`, 14, 26);
+  doc.text(`Total de la semana: ${cop(totalSemana)}`, 14, 33);
+
+  autoTable(doc, {
+    startY: 40,
+    head: [["Empleado", "Ordinarias", "Nocturnas", "Extra diurna", "Extra nocturna", "Dom/Festivo", "Total"]],
+    body: porEmpleado.map(({ emp, liq }) => [
+      emp.nombre,
+      `${liq.horasOrdinariasDiurnas.toFixed(1)}h`,
+      liq.horasOrdinariasNocturnas > 0 ? `${liq.horasOrdinariasNocturnas.toFixed(1)}h` : "—",
+      liq.horasExtraDiurnas > 0 ? `${liq.horasExtraDiurnas.toFixed(1)}h` : "—",
+      liq.horasExtraNocturnas > 0 ? `${liq.horasExtraNocturnas.toFixed(1)}h` : "—",
+      liq.horasDominicalFestivo > 0 ? `${liq.horasDominicalFestivo.toFixed(1)}h` : "—",
+      cop(liq.total),
+    ]),
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [37, 84, 199] }, // --primary de la app
+  });
+
+  doc.setFontSize(8);
+  doc.setTextColor(150);
+  doc.text(
+    "Cálculo según la Ley 2101 de 2021 (jornada 42h, divisor 210) — valida con tu contador antes de pagar.",
+    14,
+    doc.internal.pageSize.getHeight() - 10,
+  );
+
+  doc.save(`nomina-${rangoTexto.replace(/\s/g, "-")}.pdf`);
+}
 
 function aMarcacion(t: TimeEntry): Marcacion {
   return {
@@ -27,9 +80,11 @@ function formatearSemana(lunesISO: string) {
 }
 
 export default function ReportesPage() {
+  const [company, setCompany] = useState<Company | null>(null);
   const [empleados, setEmpleados] = useState<Employee[]>([]);
   const [marcaciones, setMarcaciones] = useState<Marcacion[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [generandoPdf, setGenerandoPdf] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -51,6 +106,7 @@ export default function ReportesPage() {
           hoy.toISOString().slice(0, 10),
         ),
       ]);
+      setCompany(empresa);
       setEmpleados(emps);
       setMarcaciones(entradas.map(aMarcacion));
       setCargando(false);
@@ -112,8 +168,26 @@ export default function ReportesPage() {
                   <p className="text-sm font-bold text-foreground">
                     Semana {formatearSemana(semanaKey)}
                   </p>
-                  <button className="flex items-center gap-1 text-xs font-semibold text-primary">
-                    <FileDown className="h-3.5 w-3.5" /> PDF
+                  <button
+                    onClick={async () => {
+                      if (!company) return;
+                      setGenerandoPdf(semanaKey);
+                      try {
+                        await descargarPdfSemana(
+                          company.name,
+                          formatearSemana(semanaKey),
+                          totalSemana,
+                          porEmpleado,
+                        );
+                      } finally {
+                        setGenerandoPdf(null);
+                      }
+                    }}
+                    disabled={generandoPdf === semanaKey}
+                    className="flex items-center gap-1 text-xs font-semibold text-primary disabled:opacity-50"
+                  >
+                    <FileDown className="h-3.5 w-3.5" />
+                    {generandoPdf === semanaKey ? "Generando..." : "PDF"}
                   </button>
                 </div>
                 <p className="tabular mt-1 text-2xl font-extrabold text-foreground">
