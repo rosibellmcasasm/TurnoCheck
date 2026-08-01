@@ -71,8 +71,22 @@ function MarcarContenido() {
 
   const tipo: "entrada" | "salida" = turnoAbierto ? "salida" : "entrada";
 
+  const camaraSolicitadaRef = useRef(false);
+
   useEffect(() => {
-    if (fase !== "cargando") return;
+    // Bug real de fondo (la causa verdadera de la vista previa en negro,
+    // no un tema de exposición ni de autoplay): este efecto depende de
+    // `fase`, y dentro de él mismo se llama a setFase("lista") — eso hace
+    // que el efecto se vuelva a ejecutar, su limpieza corre PRIMERO (para
+    // por eso corta las pistas de la cámara que acababan de arrancar), y
+    // como fase ya no es "cargando" el cuerpo no vuelve a pedir la cámara.
+    // Resultado: el stream se apagaba solo, segundos después de empezar —
+    // por eso ni esperar a "loadeddata" ni llamar a play() arreglaba nada,
+    // el video quedaba con las pistas realmente detenidas. Se evita con un
+    // ref que asegura que la cámara solo se pide UNA vez por visita a esta
+    // pantalla, sin importar cuántas veces cambie `fase` después.
+    if (fase !== "cargando" || camaraSolicitadaRef.current) return;
+    camaraSolicitadaRef.current = true;
     let activo = true;
     navigator.mediaDevices
       ?.getUserMedia({ video: { facingMode: "user" }, audio: false })
@@ -85,18 +99,9 @@ function MarcarContenido() {
           return;
         }
         video.srcObject = stream;
-        // Bug real corregido (la causa de fondo, no solo el timing): el
-        // atributo "autoplay" del <video> no arranca la reproducción de
-        // forma confiable en varios navegadores móviles cuando el stream se
-        // asigna por JS después del montaje — el elemento se queda con un
-        // frame negro "pausado" indefinidamente, visible incluso en la
-        // vista previa en vivo (no solo al capturar). Se llama a play()
-        // explícitamente; si el navegador la rechaza, se reintenta una vez.
-        const arrancar = () =>
-          video.play().catch(() => {
-            setTimeout(() => video.play().catch(() => {}), 300);
-          });
-        arrancar();
+        video.play().catch(() => {
+          setTimeout(() => video.play().catch(() => {}), 300);
+        });
         if (video.readyState >= 2) {
           setFase("lista");
         } else {
@@ -116,9 +121,16 @@ function MarcarContenido() {
 
     return () => {
       activo = false;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, [fase]);
+
+  // La cámara solo se apaga de verdad cuando el usuario SALE de esta
+  // pantalla (desmontaje) — nunca por un cambio interno de `fase`.
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
 
   /** Brillo promedio 0-255 de un canvas, muestreando ~300 píxeles (no los
    *   300k+ del frame completo — de sobra para detectar un frame negro). */
