@@ -62,20 +62,24 @@ export default function HoyPage() {
   const [entradas, setEntradas] = useState<TimeEntry[]>([]);
   const [cargando, setCargando] = useState(true);
   const [verMarcacion, setVerMarcacion] = useState<{ emp: Employee; entry: TimeEntry } | null>(null);
-  const [fotoUrl, setFotoUrl] = useState<string | null>(null);
+  const [fotoEntradaUrl, setFotoEntradaUrl] = useState<string | null>(null);
+  const [fotoSalidaUrl, setFotoSalidaUrl] = useState<string | null>(null);
   const [cargandoFoto, setCargandoFoto] = useState(false);
 
   async function abrirMarcacion(emp: Employee, entry: TimeEntry) {
     setVerMarcacion({ emp, entry });
-    setFotoUrl(null);
-    if (!entry.foto_url) return;
+    setFotoEntradaUrl(null);
+    setFotoSalidaUrl(null);
+    if (!entry.foto_url && !entry.foto_salida_url) return;
     setCargandoFoto(true);
     try {
       const supabase = createClient();
-      const url = await getFotoMarcacionUrl(supabase, entry.foto_url);
-      setFotoUrl(url);
-    } catch {
-      setFotoUrl(null);
+      const [entradaUrl, salidaUrl] = await Promise.all([
+        entry.foto_url ? getFotoMarcacionUrl(supabase, entry.foto_url).catch(() => null) : null,
+        entry.foto_salida_url ? getFotoMarcacionUrl(supabase, entry.foto_salida_url).catch(() => null) : null,
+      ]);
+      setFotoEntradaUrl(entradaUrl);
+      setFotoSalidaUrl(salidaUrl);
     } finally {
       setCargandoFoto(false);
     }
@@ -295,24 +299,40 @@ export default function HoyPage() {
                 </button>
               </div>
 
-              <div className="mt-4 aspect-square w-full overflow-hidden rounded-xl bg-secondary">
-                {cargandoFoto && (
-                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                    Cargando foto...
-                  </div>
-                )}
-                {!cargandoFoto && fotoUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={fotoUrl} alt={`Foto de marcación de ${verMarcacion.emp.nombre}`} className="h-full w-full object-cover" />
-                )}
-                {!cargandoFoto && !fotoUrl && (
-                  <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-                    <Camera className="h-6 w-6 text-muted-foreground" />
-                    <p className="text-xs text-muted-foreground">
-                      Esta marcación no tiene foto guardada.
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                {[
+                  { label: "Entrada", url: fotoEntradaUrl, hayFoto: !!verMarcacion.entry.foto_url },
+                  { label: "Salida", url: fotoSalidaUrl, hayFoto: !!verMarcacion.entry.foto_salida_url },
+                ].map(({ label, url, hayFoto }) => (
+                  <div key={label}>
+                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {label}
                     </p>
+                    <div className="aspect-square w-full overflow-hidden rounded-xl bg-secondary">
+                      {cargandoFoto && hayFoto && (
+                        <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                          Cargando...
+                        </div>
+                      )}
+                      {!cargandoFoto && url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={url}
+                          alt={`Foto de ${label.toLowerCase()} de ${verMarcacion.emp.nombre}`}
+                          className="h-full w-full object-cover"
+                        />
+                      )}
+                      {!cargandoFoto && !url && (
+                        <div className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center">
+                          <Camera className="h-5 w-5 text-muted-foreground" />
+                          <p className="text-[11px] text-muted-foreground">
+                            {hayFoto ? "No se pudo cargar" : "Sin foto"}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
 
               <div className="mt-4 space-y-1.5 text-sm">

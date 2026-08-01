@@ -35,6 +35,7 @@ export interface TimeEntry {
   hora_salida: string | null;
   es_festivo: boolean;
   foto_url: string | null;
+  foto_salida_url: string | null;
   lat: number | null;
   lng: number | null;
   fuera_de_rango: boolean;
@@ -201,10 +202,15 @@ export async function crearMarcacionEntrada(
   return data as TimeEntry;
 }
 
-export async function marcarSalida(supabase: SupabaseClient, timeEntryId: string, horaSalida: string) {
+export async function marcarSalida(
+  supabase: SupabaseClient,
+  timeEntryId: string,
+  horaSalida: string,
+  fotoSalidaUrl?: string,
+) {
   const { error } = await supabase
     .from("time_entries")
-    .update({ hora_salida: horaSalida })
+    .update({ hora_salida: horaSalida, foto_salida_url: fotoSalidaUrl ?? null })
     .eq("id", timeEntryId);
   if (error) throw error;
 }

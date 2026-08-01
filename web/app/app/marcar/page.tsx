@@ -218,7 +218,7 @@ function MarcarContenido() {
         fuera_de_rango: coords ? !dentroDeAlgunSitio(coords, sitios) : false,
       });
     } else if (turnoAbierto) {
-      await marcarSalida(supabase, turnoAbierto.id, horaAhora());
+      await marcarSalida(supabase, turnoAbierto.id, horaAhora(), fotoUrl);
     }
     router.push("/app");
   }
