@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Info, FileDown } from "lucide-react";
+import { Info, FileDown, Sheet } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   ensureCompany,
@@ -57,6 +57,47 @@ async function descargarPdfSemana(
   );
 
   doc.save(`nomina-${rangoTexto.replace(/\s/g, "-")}.pdf`);
+}
+
+function celdaCsv(valor: string | number) {
+  const texto = String(valor);
+  if (/[";\n]/.test(texto)) return `"${texto.replace(/"/g, '""')}"`;
+  return texto;
+}
+
+function descargarExcelSemana(
+  nombreNegocio: string,
+  rangoTexto: string,
+  totalSemana: number,
+  porEmpleado: { emp: Employee; liq: LiquidacionSemana }[],
+) {
+  const cop = (n: number) => Math.round(n);
+  const filas = [
+    [nombreNegocio],
+    [`Reporte de nómina — semana ${rangoTexto}`],
+    [`Total de la semana: $${cop(totalSemana).toLocaleString("es-CO")}`],
+    [],
+    ["Empleado", "Ordinarias (h)", "Nocturnas (h)", "Extra diurna (h)", "Extra nocturna (h)", "Dom/Festivo (h)", "Total"],
+    ...porEmpleado.map(({ emp, liq }) => [
+      emp.nombre,
+      liq.horasOrdinariasDiurnas.toFixed(1),
+      liq.horasOrdinariasNocturnas.toFixed(1),
+      liq.horasExtraDiurnas.toFixed(1),
+      liq.horasExtraNocturnas.toFixed(1),
+      liq.horasDominicalFestivo.toFixed(1),
+      cop(liq.total),
+    ]),
+  ];
+
+  // BOM al inicio para que Excel detecte UTF-8 y muestre bien las tildes/ñ.
+  const csv = "﻿" + filas.map((fila) => fila.map(celdaCsv).join(";")).join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `nomina-${rangoTexto.replace(/\s/g, "-")}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function aMarcacion(t: TimeEntry): Marcacion {
@@ -168,27 +209,39 @@ export default function ReportesPage() {
                   <p className="text-sm font-bold text-foreground">
                     Semana {formatearSemana(semanaKey)}
                   </p>
-                  <button
-                    onClick={async () => {
-                      if (!company) return;
-                      setGenerandoPdf(semanaKey);
-                      try {
-                        await descargarPdfSemana(
-                          company.name,
-                          formatearSemana(semanaKey),
-                          totalSemana,
-                          porEmpleado,
-                        );
-                      } finally {
-                        setGenerandoPdf(null);
-                      }
-                    }}
-                    disabled={generandoPdf === semanaKey}
-                    className="flex items-center gap-1 text-xs font-semibold text-primary disabled:opacity-50"
-                  >
-                    <FileDown className="h-3.5 w-3.5" />
-                    {generandoPdf === semanaKey ? "Generando..." : "PDF"}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        if (!company) return;
+                        descargarExcelSemana(company.name, formatearSemana(semanaKey), totalSemana, porEmpleado);
+                      }}
+                      className="flex items-center gap-1 text-xs font-semibold text-primary"
+                    >
+                      <Sheet className="h-3.5 w-3.5" />
+                      Excel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!company) return;
+                        setGenerandoPdf(semanaKey);
+                        try {
+                          await descargarPdfSemana(
+                            company.name,
+                            formatearSemana(semanaKey),
+                            totalSemana,
+                            porEmpleado,
+                          );
+                        } finally {
+                          setGenerandoPdf(null);
+                        }
+                      }}
+                      disabled={generandoPdf === semanaKey}
+                      className="flex items-center gap-1 text-xs font-semibold text-primary disabled:opacity-50"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      {generandoPdf === semanaKey ? "Generando..." : "PDF"}
+                    </button>
+                  </div>
                 </div>
                 <p className="tabular mt-1 text-2xl font-extrabold text-foreground">
                   ${Math.round(totalSemana).toLocaleString("es-CO")}

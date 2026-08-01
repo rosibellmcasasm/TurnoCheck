@@ -1,6 +1,43 @@
 # ESTADO — TurnoCheck
 Última actualización: 2026-07-31 | Sesión actual: 1
 
+## Cámara, foto de salida y exportar a Excel (2026-07-31)
+- ✅ RAÍZ del video en negro en /app/marcar encontrada: el `useEffect` que pedía la cámara
+  dependía de `fase`, y dentro del propio efecto se llamaba `setFase("lista")` — React
+  re-ejecutaba el efecto, su limpieza apagaba las pistas de la cámara recién iniciadas, y como
+  `fase` ya no era "cargando" no se volvía a pedir la cámara. Se corrigió con una ref que solo
+  pide la cámara una vez por visita a la pantalla, y el apagado real de las pistas se movió a un
+  efecto aparte que solo corre al salir de la pantalla. PENDIENTE: falta confirmación de la
+  usuaria en producción de que la vista previa ya no sale negra.
+- ✅ La foto de salida se capturaba pero se descontaba (solo existía `foto_url`, ligado a la
+  entrada). Se agregó la columna `foto_salida_url` (migración 0011) y el modal de "Hoy" ahora
+  muestra ambas fotos lado a lado. PENDIENTE: confirmar con una marcación NUEVA (post-fix) — la
+  usuaria reportó ver solo una foto, pero probablemente estaba viendo una marcación vieja de
+  antes del fix (que de verdad no tiene foto de salida guardada).
+- ✅ La promesa de la landing decía "Reporte mensual en PDF/Excel" pero solo existía el PDF.
+  Se construyó la exportación real a Excel en Reportes (botón "Excel" junto a "PDF") — genera un
+  CSV con BOM UTF-8 que Excel abre nativamente con el mismo desglose que el PDF. Se eligió CSV en
+  vez de la librería `xlsx` (paquete `.xlsx` real) porque esa librería tiene 2 vulnerabilidades
+  de severidad ALTA sin parchar en npm (prototype pollution + ReDoS) — se instaló, se detectó con
+  `npm audit`, y se desinstaló en la misma sesión sin usarla en el código.
+
+## App en producción y bugs reales corregidos (2026-07-31)
+App 100% en vivo en `https://turnocheck.app`, con GitHub/Vercel/Supabase/Resend/Hotmart todos
+conectados. Durante pruebas reales de la usuaria se encontraron y corrigieron 3 bugs genuinos
+(no placeholders — funciones que parecían listas pero no hacían nada):
+- ✅ Botón "PDF" en Reportes no tenía onClick — ahora genera un PDF real (jsPDF + autotable) con
+  el desglose por empleado y el total de la semana.
+- ✅ La foto de cada marcación se guardaba pero no había forma de volver a verla — ahora, en Hoy,
+  las marcaciones completas abren un modal con la foto (URL firmada del bucket privado), hora de
+  entrada/salida, link al mapa y el aviso de geocerca si aplicó.
+- ✅ Varios falsos "link expirado" en el login (confirmados con los logs de Supabase: el login SÍ
+  había funcionado) — causa: doble-petición con el mismo código PKCE. Se blindó `/auth/callback`
+  para revisar si ya hay sesión activa antes de declarar error, y se bloqueó el doble-clic en
+  "Ya casi entras".
+- ⏸️ PENDIENTE: la Fase 4 (compra de prueba real en Hotmart) sigue sin hacerse — es necesaria antes
+  de anunciar la venta, para confirmar de punta a punta que el webhook + los correos funcionan y
+  para verificar cómo llega realmente el evento de inicio de trial (placeholder sin confirmar).
+
 ## Puntualidad por empleado (2026-07-31)
 Caso real: cada negocio (y cada empleado) puede tener un horario distinto — no una regla única
 por empresa. Tolerancia acordada con el usuario: ±5 minutos = "a tiempo".
