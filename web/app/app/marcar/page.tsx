@@ -85,11 +85,18 @@ function MarcarContenido() {
           return;
         }
         video.srcObject = stream;
-        // Bug real corregido: antes se pasaba a "lista" apenas resolvía
-        // getUserMedia, sin esperar a que el <video> tuviera un frame real
-        // pintado — si el usuario tocaba "Tomar foto" rápido, el canvas
-        // capturaba el video todavía en negro (0 frames). Se espera a
-        // "loadeddata" (o a que ya esté listo) antes de habilitar la captura.
+        // Bug real corregido (la causa de fondo, no solo el timing): el
+        // atributo "autoplay" del <video> no arranca la reproducción de
+        // forma confiable en varios navegadores móviles cuando el stream se
+        // asigna por JS después del montaje — el elemento se queda con un
+        // frame negro "pausado" indefinidamente, visible incluso en la
+        // vista previa en vivo (no solo al capturar). Se llama a play()
+        // explícitamente; si el navegador la rechaza, se reintenta una vez.
+        const arrancar = () =>
+          video.play().catch(() => {
+            setTimeout(() => video.play().catch(() => {}), 300);
+          });
+        arrancar();
         if (video.readyState >= 2) {
           setFase("lista");
         } else {
@@ -240,21 +247,20 @@ function MarcarContenido() {
       <div className="flex flex-1 flex-col px-5 py-5">
         {fase !== "capturada" ? (
           <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-secondary">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="h-full w-full object-cover"
-              style={{ display: fase === "lista" ? "block" : "none" }}
-            />
+            {/* El <video> se mantiene siempre montado y reproduciendo (nunca
+                display:none) — ocultarlo mientras carga apagaba la
+                reproducción en varios navegadores móviles y dejaba la
+                vista previa en negro incluso después de mostrarlo. Los
+                overlays de carga/error se dibujan ENCIMA con position
+                absolute, no reemplazando al video. */}
+            <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
             {fase === "cargando" && (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              <div className="absolute inset-0 flex items-center justify-center bg-secondary text-sm text-muted-foreground">
                 Abriendo cámara...
               </div>
             )}
             {fase === "error" && (
-              <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-secondary p-6 text-center">
                 <AlertTriangle className="h-6 w-6 text-warning" />
                 <p className="text-sm text-muted-foreground">
                   No pudimos abrir tu cámara. Revisa los permisos del navegador.
