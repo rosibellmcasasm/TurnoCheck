@@ -209,6 +209,14 @@ export async function marcarSalida(supabase: SupabaseClient, timeEntryId: string
   if (error) throw error;
 }
 
+/** El bucket "marcaciones" es privado — para mostrar la foto hay que pedir
+ *  una URL firmada de corta duración, nunca exponer el bucket como público. */
+export async function getFotoMarcacionUrl(supabase: SupabaseClient, path: string) {
+  const { data, error } = await supabase.storage.from("marcaciones").createSignedUrl(path, 120);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
 export async function updateCompanyName(supabase: SupabaseClient, companyId: string, name: string) {
   const { error } = await supabase.from("companies").update({ name }).eq("id", companyId);
   if (error) throw error;
