@@ -9,6 +9,7 @@ import {
   listTimeEntriesInRange,
   type Company,
   type Employee,
+  type PeriodoPago,
   type TimeEntry,
 } from "@/lib/supabase/queries";
 import { agruparPorSemana, liquidarSemana, type LiquidacionSemana, type Marcacion } from "@/lib/nomina";
@@ -120,6 +121,51 @@ function formatearSemana(lunesISO: string) {
   return `${fmt(lunes)} – ${fmt(domingo)}`;
 }
 
+/** A qué período de pago pertenece una semana (identificada por su lunes) — se decide por
+ *  la fecha del lunes. Es una aproximación de primera versión: una semana que cruza el límite
+ *  de dos períodos queda completa en el período de su lunes (igual que el cálculo de nómina,
+ *  no es concepto legal — se documenta en nomina.ts). */
+function claveDePeriodo(lunesISO: string, periodo: PeriodoPago): string {
+  const [y, m, d] = lunesISO.split("-").map(Number);
+  if (periodo === "semanal") return lunesISO;
+  const yyyymm = `${y}-${String(m).padStart(2, "0")}`;
+  if (periodo === "mensual") return yyyymm;
+  return `${yyyymm}-${d <= 15 ? "Q1" : "Q2"}`;
+}
+
+function formatearPeriodo(clave: string, periodo: PeriodoPago) {
+  if (periodo === "semanal") return formatearSemana(clave);
+  const fmt = (dt: Date) => dt.toLocaleDateString("es-CO", { day: "numeric", month: "short" });
+  if (periodo === "mensual") {
+    const [y, m] = clave.split("-").map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString("es-CO", { month: "long", year: "numeric" });
+  }
+  const [y, m, q] = clave.split("-");
+  const anio = Number(y);
+  const mes = Number(m);
+  const inicio = new Date(anio, mes - 1, q === "Q1" ? 1 : 16);
+  const fin = q === "Q1" ? new Date(anio, mes - 1, 15) : new Date(anio, mes, 0);
+  return `${fmt(inicio)} – ${fmt(fin)}`;
+}
+
+function sumarLiquidaciones(liqs: LiquidacionSemana[]): LiquidacionSemana {
+  const suma = (campo: keyof LiquidacionSemana) => liqs.reduce((s, l) => s + l[campo], 0);
+  return {
+    horasOrdinariasDiurnas: suma("horasOrdinariasDiurnas"),
+    horasOrdinariasNocturnas: suma("horasOrdinariasNocturnas"),
+    horasExtraDiurnas: suma("horasExtraDiurnas"),
+    horasExtraNocturnas: suma("horasExtraNocturnas"),
+    horasDominicalFestivo: suma("horasDominicalFestivo"),
+    pagoOrdinarioDiurno: suma("pagoOrdinarioDiurno"),
+    pagoOrdinarioNocturno: suma("pagoOrdinarioNocturno"),
+    pagoExtraDiurno: suma("pagoExtraDiurno"),
+    pagoExtraNocturno: suma("pagoExtraNocturno"),
+    pagoRecargoDominicalFestivo: suma("pagoRecargoDominicalFestivo"),
+    total: suma("total"),
+    valorHoraOrdinaria: liqs.length > 0 ? liqs[0].valorHoraOrdinaria : 0,
+  };
+}
+
 export default function ReportesPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [empleados, setEmpleados] = useState<Employee[]>([]);
@@ -164,8 +210,44 @@ export default function ReportesPage() {
     );
   }
 
+  const periodoPago = company?.periodo_pago ?? "semanal";
   const semanas = agruparPorSemana(marcaciones);
-  const semanasOrdenadas = Object.keys(semanas).sort().reverse();
+
+  // 1) Liquida CADA semana por separado (las horas extra se calculan por semana, no se
+  //    pueden repartir distinto solo porque el negocio pague quincenal o mensual).
+  const semanasLiquidadas = Object.keys(semanas)
+    .map((semanaKey) => {
+      const marcacionesSemana = semanas[semanaKey].filter((m) => m.horaSalida);
+      if (marcacionesSemana.length === 0) return null;
+      const porEmpleado = empleados
+        .map((emp) => {
+          const propias = marcacionesSemana.filter((m) => m.empleadoId === emp.id);
+          if (propias.length === 0) return null;
+          return { emp, liq: liquidarSemana(propias, emp.salario_mensual) };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+      if (porEmpleado.length === 0) return null;
+      return { semanaKey, porEmpleado };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  // 2) Agrupa esas semanas ya liquidadas según el período de pago del negocio, sumando los
+  //    totales de cada empleado entre las semanas que caen en el mismo período.
+  const periodos = new Map<string, { emp: Employee; liq: LiquidacionSemana }[]>();
+  for (const { semanaKey, porEmpleado } of semanasLiquidadas) {
+    const clave = claveDePeriodo(semanaKey, periodoPago);
+    const acumulado = periodos.get(clave) ?? [];
+    for (const { emp, liq } of porEmpleado) {
+      const existente = acumulado.find((x) => x.emp.id === emp.id);
+      if (existente) {
+        existente.liq = sumarLiquidaciones([existente.liq, liq]);
+      } else {
+        acumulado.push({ emp, liq });
+      }
+    }
+    periodos.set(clave, acumulado);
+  }
+  const periodosOrdenados = Array.from(periodos.keys()).sort().reverse();
 
   return (
     <div className="px-5 pt-6">
@@ -179,7 +261,7 @@ export default function ReportesPage() {
         </p>
       </div>
 
-      {semanasOrdenadas.length === 0 ? (
+      {periodosOrdenados.length === 0 ? (
         <div className="mt-6 flex min-h-[40vh] flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
           <p className="text-sm text-muted-foreground">
             Todavía no hay marcaciones completas para liquidar. Marca la salida de un
@@ -188,32 +270,24 @@ export default function ReportesPage() {
         </div>
       ) : (
         <div className="mt-5 space-y-5">
-          {semanasOrdenadas.map((semanaKey) => {
-            const marcacionesSemana = semanas[semanaKey].filter((m) => m.horaSalida);
-            if (marcacionesSemana.length === 0) return null;
-
-            const porEmpleado = empleados
-              .map((emp) => {
-                const propias = marcacionesSemana.filter((m) => m.empleadoId === emp.id);
-                if (propias.length === 0) return null;
-                return { emp, liq: liquidarSemana(propias, emp.salario_mensual) };
-              })
-              .filter((x): x is NonNullable<typeof x> => x !== null);
-
-            if (porEmpleado.length === 0) return null;
-            const totalSemana = porEmpleado.reduce((s, x) => s + x.liq.total, 0);
+          {periodosOrdenados.map((periodoClave) => {
+            const porEmpleado = periodos.get(periodoClave)!;
+            const rangoTexto = formatearPeriodo(periodoClave, periodoPago);
+            const totalPeriodo = porEmpleado.reduce((s, x) => s + x.liq.total, 0);
+            const etiqueta =
+              periodoPago === "semanal" ? "Semana" : periodoPago === "quincenal" ? "Quincena" : "Mes";
 
             return (
-              <div key={semanaKey} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <div key={periodoClave} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-bold text-foreground">
-                    Semana {formatearSemana(semanaKey)}
+                    {etiqueta} {rangoTexto}
                   </p>
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => {
                         if (!company) return;
-                        descargarExcelSemana(company.name, formatearSemana(semanaKey), totalSemana, porEmpleado);
+                        descargarExcelSemana(company.name, rangoTexto, totalPeriodo, porEmpleado);
                       }}
                       className="flex items-center gap-1 text-xs font-semibold text-primary"
                     >
@@ -223,28 +297,23 @@ export default function ReportesPage() {
                     <button
                       onClick={async () => {
                         if (!company) return;
-                        setGenerandoPdf(semanaKey);
+                        setGenerandoPdf(periodoClave);
                         try {
-                          await descargarPdfSemana(
-                            company.name,
-                            formatearSemana(semanaKey),
-                            totalSemana,
-                            porEmpleado,
-                          );
+                          await descargarPdfSemana(company.name, rangoTexto, totalPeriodo, porEmpleado);
                         } finally {
                           setGenerandoPdf(null);
                         }
                       }}
-                      disabled={generandoPdf === semanaKey}
+                      disabled={generandoPdf === periodoClave}
                       className="flex items-center gap-1 text-xs font-semibold text-primary disabled:opacity-50"
                     >
                       <FileDown className="h-3.5 w-3.5" />
-                      {generandoPdf === semanaKey ? "Generando..." : "PDF"}
+                      {generandoPdf === periodoClave ? "Generando..." : "PDF"}
                     </button>
                   </div>
                 </div>
                 <p className="tabular mt-1 text-2xl font-extrabold text-foreground">
-                  ${Math.round(totalSemana).toLocaleString("es-CO")}
+                  ${Math.round(totalPeriodo).toLocaleString("es-CO")}
                 </p>
 
                 <div className="mt-3 space-y-3 border-t border-border pt-3">

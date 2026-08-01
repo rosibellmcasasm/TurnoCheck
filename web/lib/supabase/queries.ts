@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { readOnboarding, ONBOARDING_KEY, planRecomendado } from "@/lib/onboarding-storage";
 
+export type PeriodoPago = "semanal" | "quincenal" | "mensual";
+
 export interface Company {
   id: string;
   owner_id: string;
@@ -9,6 +11,7 @@ export interface Company {
   jornadas: string[];
   plan: "micro" | "pyme";
   plan_empleados_limite: number;
+  periodo_pago: PeriodoPago;
   created_at: string;
 }
 
@@ -225,6 +228,15 @@ export async function getFotoMarcacionUrl(supabase: SupabaseClient, path: string
 
 export async function updateCompanyName(supabase: SupabaseClient, companyId: string, name: string) {
   const { error } = await supabase.from("companies").update({ name }).eq("id", companyId);
+  if (error) throw error;
+}
+
+export async function updateCompanyPeriodoPago(
+  supabase: SupabaseClient,
+  companyId: string,
+  periodoPago: PeriodoPago,
+) {
+  const { error } = await supabase.from("companies").update({ periodo_pago: periodoPago }).eq("id", companyId);
   if (error) throw error;
 }
 

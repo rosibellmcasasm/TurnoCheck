@@ -7,13 +7,21 @@ import { createClient } from "@/lib/supabase/client";
 import {
   ensureCompany,
   updateCompanyName,
+  updateCompanyPeriodoPago,
   listWorkSites,
   createWorkSite,
   toggleWorkSiteActivo,
   deleteWorkSite,
   type Company,
   type WorkSite,
+  type PeriodoPago,
 } from "@/lib/supabase/queries";
+
+const PERIODOS: { valor: PeriodoPago; etiqueta: string }[] = [
+  { valor: "semanal", etiqueta: "Semanal" },
+  { valor: "quincenal", etiqueta: "Quincenal" },
+  { valor: "mensual", etiqueta: "Mensual" },
+];
 
 export default function AjustesPage() {
   const router = useRouter();
@@ -50,6 +58,13 @@ export default function AjustesPage() {
     if (!company) return;
     const supabase = createClient();
     await updateCompanyName(supabase, company.id, nombre);
+  }
+
+  async function cambiarPeriodoPago(periodo: PeriodoPago) {
+    if (!company) return;
+    setCompany({ ...company, periodo_pago: periodo });
+    const supabase = createClient();
+    await updateCompanyPeriodoPago(supabase, company.id, periodo);
   }
 
   function agregarSitio() {
@@ -123,6 +138,29 @@ export default function AjustesPage() {
           Plan actual: <span className="font-medium text-foreground">{company.plan === "pyme" ? "Pyme" : "Micro"}</span>{" "}
           · hasta {company.plan_empleados_limite} empleados
         </p>
+
+        <div className="mt-4 border-t border-border pt-3.5">
+          <p className="text-sm font-medium text-foreground">¿Cada cuánto pagas?</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Reportes va a agrupar los totales según esto. Las horas extra se siguen calculando
+            semana a semana, como lo pide la ley.
+          </p>
+          <div className="mt-2.5 flex gap-2">
+            {PERIODOS.map((p) => (
+              <button
+                key={p.valor}
+                onClick={() => cambiarPeriodoPago(p.valor)}
+                className={`h-9 flex-1 rounded-lg text-xs font-semibold ${
+                  company.periodo_pago === p.valor
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                {p.etiqueta}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
