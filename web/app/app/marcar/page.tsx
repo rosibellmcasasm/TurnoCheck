@@ -79,8 +79,22 @@ function MarcarContenido() {
       .then((stream) => {
         if (!activo) return;
         streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
-        setFase("lista");
+        const video = videoRef.current;
+        if (!video) {
+          setFase("lista");
+          return;
+        }
+        video.srcObject = stream;
+        // Bug real corregido: antes se pasaba a "lista" apenas resolvía
+        // getUserMedia, sin esperar a que el <video> tuviera un frame real
+        // pintado — si el usuario tocaba "Tomar foto" rápido, el canvas
+        // capturaba el video todavía en negro (0 frames). Se espera a
+        // "loadeddata" (o a que ya esté listo) antes de habilitar la captura.
+        if (video.readyState >= 2) {
+          setFase("lista");
+        } else {
+          video.onloadeddata = () => activo && setFase("lista");
+        }
       })
       .catch(() => activo && setFase("error"));
 
