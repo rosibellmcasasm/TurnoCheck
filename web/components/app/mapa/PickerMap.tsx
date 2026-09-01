@@ -1,8 +1,9 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
+import { useEffect } from "react";
 import L from "leaflet";
-import { MapContainer, TileLayer, Marker, Circle, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from "react-leaflet";
 
 const iconoPin = L.divIcon({
   className: "",
@@ -17,6 +18,17 @@ function ClicksDelMapa({ onMover }: { onMover: (lat: number, lng: number) => voi
       onMover(e.latlng.lat, e.latlng.lng);
     },
   });
+  return null;
+}
+
+/** MapContainer solo usa `center` en el primer render — react-leaflet no
+ *  recentra solo cuando el prop cambia después (ej. al elegir un resultado
+ *  de búsqueda). Este componente escucha el cambio y mueve la vista a mano. */
+function RecentrarMapa({ lat, lng }: { lat: number; lng: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView([lat, lng], map.getZoom());
+  }, [lat, lng, map]);
   return null;
 }
 
@@ -45,6 +57,7 @@ export function PickerMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <ClicksDelMapa onMover={onMover} />
+      <RecentrarMapa lat={centro?.lat ?? lat} lng={centro?.lng ?? lng} />
       <Circle
         center={[lat, lng]}
         radius={radioMetros}
