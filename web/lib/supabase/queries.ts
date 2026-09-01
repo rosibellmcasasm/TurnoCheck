@@ -50,6 +50,8 @@ export interface TimeEntry {
   lat: number | null;
   lng: number | null;
   fuera_de_rango: boolean;
+  work_site_id: string | null;
+  activity_id: string | null;
   created_at: string;
 }
 
@@ -235,6 +237,8 @@ export async function crearMarcacionEntrada(
     lat?: number;
     lng?: number;
     fuera_de_rango?: boolean;
+    work_site_id?: string | null;
+    activity_id?: string | null;
   },
 ) {
   const { data, error } = await supabase

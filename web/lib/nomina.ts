@@ -43,6 +43,10 @@ export interface Marcacion {
   // pagadas. Mismo horario de descanso para todos los días trabajados.
   descansoInicio?: string | null;
   descansoFin?: string | null;
+  // A qué sitio de trabajo (proyecto) y actividad perteneció — para poder
+  // filtrar/agrupar reportes por proyecto, cliente o actividad.
+  workSiteId?: string | null;
+  activityId?: string | null;
 }
 
 function horaAMinutos(hora: string): number {

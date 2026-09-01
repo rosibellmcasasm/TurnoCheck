@@ -7,19 +7,25 @@ import {
   ensureCompany,
   listEmployees,
   listTimeEntriesInRange,
+  listWorkSites,
+  listWorkSiteActivities,
   type Company,
   type Employee,
   type PeriodoPago,
   type TimeEntry,
+  type WorkSite,
+  type WorkSiteActivity,
 } from "@/lib/supabase/queries";
 import {
   agruparPorSemana,
   liquidarSemana,
   sumarLiquidaciones,
+  desglosarMarcacion,
   type LiquidacionSemana,
   type Marcacion,
 } from "@/lib/nomina";
 import { PanelAsistencia } from "@/components/app/reportes/PanelAsistencia";
+import { PieProyectos } from "@/components/app/reportes/PieProyectos";
 
 async function descargarPdfSemana(
   nombreNegocio: string,
@@ -118,6 +124,8 @@ function aMarcacion(t: TimeEntry, empleado?: Employee): Marcacion {
     esFestivo: t.es_festivo,
     descansoInicio: empleado?.descanso_inicio,
     descansoFin: empleado?.descanso_fin,
+    workSiteId: t.work_site_id,
+    activityId: t.activity_id,
   };
 }
 
@@ -161,9 +169,14 @@ export default function ReportesPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [empleados, setEmpleados] = useState<Employee[]>([]);
   const [marcaciones, setMarcaciones] = useState<Marcacion[]>([]);
+  const [sitios, setSitios] = useState<WorkSite[]>([]);
+  const [actividades, setActividades] = useState<WorkSiteActivity[]>([]);
   const [cargando, setCargando] = useState(true);
   const [generandoPdf, setGenerandoPdf] = useState<string | null>(null);
   const [pestana, setPestana] = useState<"nomina" | "asistencia">("nomina");
+  const [filtroSitioId, setFiltroSitioId] = useState<string>("todos");
+  const [filtroCliente, setFiltroCliente] = useState<string>("todos");
+  const [filtroActividadId, setFiltroActividadId] = useState<string>("todas");
 
   useEffect(() => {
     const supabase = createClient();
@@ -176,7 +189,7 @@ export default function ReportesPage() {
       const hoy = new Date();
       const hace60 = new Date(hoy);
       hace60.setDate(hoy.getDate() - 60);
-      const [emps, entradas] = await Promise.all([
+      const [emps, entradas, sitiosTrabajo] = await Promise.all([
         listEmployees(supabase, empresa.id),
         listTimeEntriesInRange(
           supabase,
@@ -184,11 +197,17 @@ export default function ReportesPage() {
           hace60.toISOString().slice(0, 10),
           hoy.toISOString().slice(0, 10),
         ),
+        listWorkSites(supabase, empresa.id),
       ]);
+      const actividadesPorSitio = await Promise.all(
+        sitiosTrabajo.map((s) => listWorkSiteActivities(supabase, s.id)),
+      );
       const empleadosPorId = new Map(emps.map((e) => [e.id, e]));
       setCompany(empresa);
       setEmpleados(emps);
       setMarcaciones(entradas.map((t) => aMarcacion(t, empleadosPorId.get(t.employee_id))));
+      setSitios(sitiosTrabajo);
+      setActividades(actividadesPorSitio.flat());
       setCargando(false);
     })();
   }, []);
@@ -204,7 +223,23 @@ export default function ReportesPage() {
   }
 
   const periodoPago = company?.periodo_pago ?? "semanal";
-  const semanas = agruparPorSemana(marcaciones);
+  const clientesDisponibles = Array.from(new Set(sitios.map((s) => s.cliente).filter((c): c is string => !!c)));
+  const sitiosDelCliente =
+    filtroCliente === "todos" ? sitios : sitios.filter((s) => s.cliente === filtroCliente);
+  const idsSitiosDelCliente = new Set(sitiosDelCliente.map((s) => s.id));
+  const actividadesDisponibles =
+    filtroSitioId === "todos" ? actividades : actividades.filter((a) => a.work_site_id === filtroSitioId);
+
+  // Filtra por proyecto (sitio), cliente (del sitio) y actividad — cada uno opcional
+  // ("todos"/"todas" = sin filtrar por esa dimensión).
+  const marcacionesFiltradas = marcaciones.filter((m) => {
+    if (filtroSitioId !== "todos" && m.workSiteId !== filtroSitioId) return false;
+    if (filtroCliente !== "todos" && (!m.workSiteId || !idsSitiosDelCliente.has(m.workSiteId))) return false;
+    if (filtroActividadId !== "todas" && m.activityId !== filtroActividadId) return false;
+    return true;
+  });
+
+  const semanas = agruparPorSemana(marcacionesFiltradas);
 
   // 1) Liquida CADA semana por separado (las horas extra se calculan por semana, no se
   //    pueden repartir distinto solo porque el negocio pague quincenal o mensual).
@@ -242,6 +277,22 @@ export default function ReportesPage() {
   }
   const periodosOrdenados = Array.from(periodos.keys()).sort().reverse();
 
+  // Diagrama de torta: horas invertidas (ya filtradas por proyecto/cliente/actividad)
+  // agrupadas por proyecto — para validar de un vistazo en qué se fue el tiempo.
+  const sitiosPorId = new Map(sitios.map((s) => [s.id, s]));
+  const horasPorSitio = new Map<string, number>();
+  for (const m of marcacionesFiltradas) {
+    const desglose = desglosarMarcacion(m);
+    if (!desglose) continue;
+    const clave = m.workSiteId ?? "sin-proyecto";
+    horasPorSitio.set(clave, (horasPorSitio.get(clave) ?? 0) + desglose.horasTotal);
+  }
+  const datosPie = Array.from(horasPorSitio.entries()).map(([clave, horas]) => ({
+    nombre: clave === "sin-proyecto" ? "Sin proyecto" : sitiosPorId.get(clave)?.nombre ?? "Proyecto eliminado",
+    horas,
+    color: clave === "sin-proyecto" ? "#94A3B8" : sitiosPorId.get(clave)?.color,
+  }));
+
   return (
     <div className="px-5 pt-6">
       <h1 className="font-display text-xl font-extrabold text-foreground">Reportes</h1>
@@ -270,15 +321,75 @@ export default function ReportesPage() {
 
       {pestana === "asistencia" ? (
         company && <PanelAsistencia company={company} empleados={empleados} />
-      ) : periodosOrdenados.length === 0 ? (
-        <div className="mt-6 flex min-h-[40vh] flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            Todavía no hay marcaciones completas para liquidar. Marca la salida de un
-            turno en &quot;Hoy&quot; para ver tu primer reporte.
-          </p>
-        </div>
       ) : (
-        <div className="mt-5 space-y-5">
+        <>
+          {sitios.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                Filtrar por proyecto, cliente o actividad
+              </p>
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <select
+                  value={filtroSitioId}
+                  onChange={(e) => {
+                    setFiltroSitioId(e.target.value);
+                    setFiltroActividadId("todas");
+                  }}
+                  className="h-10 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:border-primary"
+                >
+                  <option value="todos">Todos los proyectos</option>
+                  {sitios.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nombre}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={filtroCliente}
+                  onChange={(e) => setFiltroCliente(e.target.value)}
+                  className="h-10 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:border-primary"
+                >
+                  <option value="todos">Todos los clientes</option>
+                  {clientesDisponibles.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={filtroActividadId}
+                  onChange={(e) => setFiltroActividadId(e.target.value)}
+                  className="h-10 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:border-primary"
+                >
+                  <option value="todas">Todas las actividades</option>
+                  {actividadesDisponibles.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {datosPie.length > 0 && (
+                <div className="mt-4 border-t border-border pt-3.5">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    Horas invertidas por proyecto
+                  </p>
+                  <PieProyectos datos={datosPie} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {periodosOrdenados.length === 0 ? (
+            <div className="mt-6 flex min-h-[40vh] flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                Todavía no hay marcaciones completas para liquidar en este filtro. Marca la salida de
+                un turno en &quot;Hoy&quot; para ver tu primer reporte.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-5 space-y-5">
           {periodosOrdenados.map((periodoClave) => {
             const porEmpleado = periodos.get(periodoClave)!;
             const rangoTexto = formatearPeriodo(periodoClave, periodoPago);
@@ -355,7 +466,9 @@ export default function ReportesPage() {
               </div>
             );
           })}
-        </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
