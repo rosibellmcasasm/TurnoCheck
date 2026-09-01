@@ -396,7 +396,7 @@ function MarcarContenido() {
           );
         })()}
 
-        {accion === "entrada" && (
+        {accion === "entrada" && company?.pais !== "us_colorado" && (
           <label className="mt-3 flex items-center gap-2 px-1 text-sm text-foreground">
             <input
               type="checkbox"

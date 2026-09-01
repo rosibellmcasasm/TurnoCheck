@@ -9,6 +9,7 @@ import {
   ensureCompany,
   updateCompanyName,
   updateCompanyPeriodoPago,
+  updateCompanyPais,
   listWorkSites,
   createWorkSite,
   updateWorkSite,
@@ -25,6 +26,7 @@ import {
   type Employee,
   type PeriodoPago,
 } from "@/lib/supabase/queries";
+import { PAISES } from "@/lib/moneda";
 
 const PERIODOS: { valor: PeriodoPago; etiqueta: string }[] = [
   { valor: "semanal", etiqueta: "Semanal" },
@@ -101,6 +103,13 @@ export default function AjustesPage() {
     setCompany({ ...company, periodo_pago: periodo });
     const supabase = createClient();
     await updateCompanyPeriodoPago(supabase, company.id, periodo);
+  }
+
+  async function cambiarPais(pais: (typeof PAISES)[number]["valor"]) {
+    if (!company) return;
+    setCompany({ ...company, pais });
+    const supabase = createClient();
+    await updateCompanyPais(supabase, company.id, pais);
   }
 
   function limpiarFormularioSitio() {
@@ -270,6 +279,29 @@ export default function AjustesPage() {
                 onClick={() => cambiarPeriodoPago(p.valor)}
                 className={`h-9 flex-1 rounded-lg text-xs font-semibold ${
                   company.periodo_pago === p.valor
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                {p.etiqueta}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 border-t border-border pt-3.5">
+          <p className="text-sm font-medium text-foreground">País / jurisdicción</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Define cómo se calculan las horas extra y en qué moneda se muestra todo. Cambiarlo
+            no borra nada, pero los reportes futuros usarán las reglas nuevas.
+          </p>
+          <div className="mt-2.5 flex gap-2">
+            {PAISES.map((p) => (
+              <button
+                key={p.valor}
+                onClick={() => cambiarPais(p.valor)}
+                className={`h-9 flex-1 rounded-lg text-xs font-semibold ${
+                  company.pais === p.valor
                     ? "bg-primary text-primary-foreground"
                     : "bg-secondary text-muted-foreground"
                 }`}

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { readOnboarding, ONBOARDING_KEY, planRecomendado } from "@/lib/onboarding-storage";
 import type { HorarioSemanal } from "@/lib/horario-semanal";
+import type { Pais } from "@/lib/moneda";
 
 export type PeriodoPago = "semanal" | "quincenal" | "mensual";
 export type Disponibilidad = "fijo" | "flexible";
@@ -14,6 +15,7 @@ export interface Company {
   plan: "micro" | "pyme";
   plan_empleados_limite: number;
   periodo_pago: PeriodoPago;
+  pais: Pais;
   created_at: string;
 }
 
@@ -24,6 +26,7 @@ export interface Employee {
   nombre: string;
   cargo: string | null;
   salario_mensual: number;
+  tarifa_hora: number | null;
   hora_entrada_esperada: string | null;
   hora_salida_esperada: string | null;
   email: string | null;
@@ -163,6 +166,7 @@ export async function createEmployee(
     nombre: string;
     cargo: string;
     salario_mensual: number;
+    tarifa_hora?: number | null;
     hora_entrada_esperada?: string | null;
     hora_salida_esperada?: string | null;
     email?: string | null;
@@ -189,6 +193,7 @@ export async function updateEmployee(
     nombre: string;
     cargo: string;
     salario_mensual: number;
+    tarifa_hora?: number | null;
     hora_entrada_esperada?: string | null;
     hora_salida_esperada?: string | null;
     email?: string | null;
@@ -328,6 +333,11 @@ export async function updateCompanyPeriodoPago(
   periodoPago: PeriodoPago,
 ) {
   const { error } = await supabase.from("companies").update({ periodo_pago: periodoPago }).eq("id", companyId);
+  if (error) throw error;
+}
+
+export async function updateCompanyPais(supabase: SupabaseClient, companyId: string, pais: Pais) {
+  const { error } = await supabase.from("companies").update({ pais }).eq("id", companyId);
   if (error) throw error;
 }
 

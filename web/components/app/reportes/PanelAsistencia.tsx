@@ -69,6 +69,21 @@ function calcularRango(
 }
 
 export function PanelAsistencia({ company, empleados }: { company: Company; empleados: Employee[] }) {
+  if (company.pais !== "colombia") {
+    return (
+      <div className="mt-4 rounded-2xl border border-dashed border-border p-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          Este reporte todavía solo calcula la liquidación al estilo Colombia. Para tu negocio en
+          Estados Unidos, usa la pestaña <span className="font-semibold text-foreground">Nómina</span>.
+        </p>
+      </div>
+    );
+  }
+
+  return <PanelAsistenciaContenido company={company} empleados={empleados} />;
+}
+
+function PanelAsistenciaContenido({ company, empleados }: { company: Company; empleados: Employee[] }) {
   const [tipos, setTipos] = useState<TipoReporteAsistencia[]>(["resumen"]);
   const [periodo, setPeriodo] = useState<PeriodoReporteAsistencia>("semana");
   const [desdePersonalizado, setDesdePersonalizado] = useState("");

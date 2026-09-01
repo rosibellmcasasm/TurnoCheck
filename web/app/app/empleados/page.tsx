@@ -17,6 +17,7 @@ import {
   type Disponibilidad,
 } from "@/lib/supabase/queries";
 import { DIAS_SEMANA, type DiaSemana, type HorarioDia, type HorarioSemanal } from "@/lib/horario-semanal";
+import { formatoMoneda } from "@/lib/moneda";
 
 const HORARIO_VACIO: HorarioDia = { activo: false, entrada: null, salida: null };
 
@@ -32,6 +33,7 @@ export default function EmpleadosPage() {
   const [nombre, setNombre] = useState("");
   const [cargo, setCargo] = useState("");
   const [salario, setSalario] = useState("");
+  const [tarifaHora, setTarifaHora] = useState("");
   const [email, setEmail] = useState("");
   const [telefono, setTelefono] = useState("");
   const [disponibilidad, setDisponibilidad] = useState<Disponibilidad>("fijo");
@@ -43,6 +45,7 @@ export default function EmpleadosPage() {
     setNombre("");
     setCargo("");
     setSalario("");
+    setTarifaHora("");
     setEmail("");
     setTelefono("");
     setDisponibilidad("fijo");
@@ -56,6 +59,7 @@ export default function EmpleadosPage() {
     setNombre(emp.nombre);
     setCargo(emp.cargo ?? "");
     setSalario(String(emp.salario_mensual));
+    setTarifaHora(emp.tarifa_hora != null ? String(emp.tarifa_hora) : "");
     setEmail(emp.email ?? "");
     setTelefono(emp.telefono ?? "");
     setDisponibilidad(emp.disponibilidad);
@@ -124,6 +128,7 @@ export default function EmpleadosPage() {
       nombre: nombre.trim(),
       cargo: cargo.trim() || "Sin cargo",
       salario_mensual: Number(salario) || 1_423_500,
+      tarifa_hora: tarifaHora ? Number(tarifaHora) : null,
       email: email.trim() || null,
       telefono: telefono.trim() || null,
       disponibilidad,
@@ -158,6 +163,8 @@ export default function EmpleadosPage() {
       </div>
     );
   }
+
+  const esUS = company.pais === "us_colorado";
 
   return (
     <div className="px-5 pt-6">
@@ -205,8 +212,11 @@ export default function EmpleadosPage() {
               <button onClick={() => abrirEdicion(emp)} className="min-w-0 flex-1 text-left">
                 <p className="truncate text-sm font-semibold text-foreground">{emp.nombre}</p>
                 <p className="text-xs text-muted-foreground">
-                  {emp.cargo} · ${emp.salario_mensual.toLocaleString("es-CO")}/mes ·{" "}
-                  {emp.disponibilidad === "flexible" ? "Flexible" : "Fijo"}
+                  {emp.cargo} ·{" "}
+                  {esUS && emp.tarifa_hora != null
+                    ? `${formatoMoneda(emp.tarifa_hora, "us_colorado")}/hora`
+                    : `${formatoMoneda(emp.salario_mensual, "colombia")}/mes`}{" "}
+                  · {emp.disponibilidad === "flexible" ? "Flexible" : "Fijo"}
                   {emp.telefono && ` · ${emp.telefono}`}
                 </p>
                 {(emp.descanso_inicio || emp.horario_semanal) && (
@@ -304,16 +314,29 @@ export default function EmpleadosPage() {
                 </label>
               </div>
 
-              <label className="mt-3 block text-sm font-medium text-foreground">
-                Salario mensual (COP)
-                <input
-                  inputMode="numeric"
-                  value={salario}
-                  onChange={(e) => setSalario(e.target.value.replace(/\D/g, ""))}
-                  placeholder="1.423.500"
-                  className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
-                />
-              </label>
+              {esUS ? (
+                <label className="mt-3 block text-sm font-medium text-foreground">
+                  Tarifa por hora (USD)
+                  <input
+                    inputMode="decimal"
+                    value={tarifaHora}
+                    onChange={(e) => setTarifaHora(e.target.value.replace(/[^\d.]/g, ""))}
+                    placeholder="18.50"
+                    className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
+                  />
+                </label>
+              ) : (
+                <label className="mt-3 block text-sm font-medium text-foreground">
+                  Salario mensual (COP)
+                  <input
+                    inputMode="numeric"
+                    value={salario}
+                    onChange={(e) => setSalario(e.target.value.replace(/\D/g, ""))}
+                    placeholder="1.423.500"
+                    className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
+                  />
+                </label>
+              )}
 
               <div className="mt-4 border-t border-border pt-3.5">
                 <p className="text-sm font-medium text-foreground">Disponibilidad</p>

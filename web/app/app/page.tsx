@@ -133,11 +133,12 @@ export default function HoyPage() {
     (e) => estadoDeHoy(e.id, entradas).estado !== "pendiente",
   ).length;
 
+  const esUS = company.pais === "us_colorado";
   const nominaHoy = entradas.reduce((acc, m) => {
     const empleado = empleados.find((e) => e.id === m.employee_id);
     const desglose = desglosarMarcacion(aMarcacion(m, empleado));
     if (!empleado || !desglose) return acc;
-    const valorHora = empleado.salario_mensual / 210;
+    const valorHora = esUS ? (empleado.tarifa_hora ?? 0) : empleado.salario_mensual / 210;
     return acc + desglose.horasTotal * valorHora;
   }, 0);
 
@@ -159,7 +160,8 @@ export default function HoyPage() {
           Nómina de hoy en vivo
         </p>
         <p className="tabular mt-1 text-3xl font-extrabold">
-          $<AnimatedNumber value={nominaHoy} />
+          {esUS ? "US$" : "$"}
+          <AnimatedNumber value={nominaHoy} />
         </p>
         <p className="mt-1 text-xs opacity-85">
           {yaMarcaron} de {empleadosActivos.length} empleados ya marcaron
