@@ -44,6 +44,7 @@ export interface TimeEntry {
   lng: number | null;
   fuera_de_rango: boolean;
   cierre_automatico: boolean;
+  work_site_id: string | null;
   created_at: string;
 }
 
@@ -55,6 +56,8 @@ export interface WorkSite {
   lat: number;
   lng: number;
   activo: boolean;
+  cliente_final: string | null;
+  avance_porcentaje: number;
   created_at: string;
 }
 
@@ -246,6 +249,18 @@ export async function cerrarTurnosVencidos(supabase: SupabaseClient, company: Co
   );
 }
 
+/** Todas las marcaciones completas de la empresa, sin límite de fecha — para
+ *  sumar horas invertidas por proyecto desde que arrancó cada obra. */
+export async function listTimeEntriesCompletas(supabase: SupabaseClient, companyId: string) {
+  const { data, error } = await supabase
+    .from("time_entries")
+    .select("*")
+    .eq("company_id", companyId)
+    .not("hora_salida", "is", null);
+  if (error) throw error;
+  return data as TimeEntry[];
+}
+
 export async function crearMarcacionEntrada(
   supabase: SupabaseClient,
   userId: string,
@@ -259,6 +274,7 @@ export async function crearMarcacionEntrada(
     lat?: number;
     lng?: number;
     fuera_de_rango?: boolean;
+    work_site_id?: string | null;
   },
 ) {
   const { data, error } = await supabase
@@ -332,6 +348,17 @@ export async function createWorkSite(
 
 export async function toggleWorkSiteActivo(supabase: SupabaseClient, siteId: string, activo: boolean) {
   const { error } = await supabase.from("work_sites").update({ activo }).eq("id", siteId);
+  if (error) throw error;
+}
+
+/** Datos del proyecto que se le muestra al cliente final (para cobrar) —
+ *  separado de los datos de la geocerca (nombre/ubicación). */
+export async function updateWorkSiteProyecto(
+  supabase: SupabaseClient,
+  siteId: string,
+  input: { cliente_final: string | null; avance_porcentaje: number },
+) {
+  const { error } = await supabase.from("work_sites").update(input).eq("id", siteId);
   if (error) throw error;
 }
 

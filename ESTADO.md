@@ -1,6 +1,27 @@
 # ESTADO — TurnoCheck
 Última actualización: 2026-09-01 | Sesión actual: 1
 
+## Menú de escritorio, guía de inicio y Proyectos por obra (2026-09-01)
+- ✅ Menú lateral fijo en pantallas anchas (`Sidebar.tsx`, md+) — reemplaza el menú inferior
+  solo en escritorio; el celular no cambió. Contenido de /app centrado con ancho máximo en
+  escritorio. Hoy: tarjetas de nómina/trabajando-ahora lado a lado en escritorio.
+- ✅ "Guía de inicio" en Hoy (`OnboardingChecklist.tsx`) — checklist de 4 pasos (primer
+  empleado, sitio de trabajo, horario esperado, primera marcación) con progreso, se oculta
+  sola al completarse o si el dueño le da a la X (localStorage, por navegador).
+- ✅ **Proyectos por obra** (pedido real de un cliente de construcción: pasarle a SU cliente
+  un informe de horas invertidas + avance para que le paguen): cada "sitio de trabajo" ahora
+  también es un proyecto — se le agrega cliente final y % de avance (editable en Ajustes,
+  manual). Cada marcación de entrada guarda a qué sitio perteneció (`work_site_id`, el sitio
+  activo más cercano dentro de la geocerca — `lib/geo.ts: sitioDentroDeRango`). Reportes tiene
+  ahora 2 pestañas: Nómina (lo de siempre) y Proyectos (horas totales invertidas por obra desde
+  su inicio + % avance + personas involucradas, con export PDF/Excel para dársela al cliente).
+- Migración `0014` (work_sites.cliente_final, work_sites.avance_porcentaje,
+  time_entries.work_site_id).
+- Decisión tomada con la usuaria: 1 sitio = 1 proyecto (no varios sitios por proyecto); avance
+  = % manual, no etapas/hitos.
+- PENDIENTE: confirmación de la usuaria probando el menú de escritorio, la guía de inicio y la
+  pestaña de Proyectos en producción.
+
 ## Inspiración Jibble: panel en vivo, mapa y salida automática (2026-09-01)
 La usuaria compartió un documento con 76 capturas del recorrido de Jibble. Se filtró qué
 aplica a un negocio pyme colombiano (no integraciones tipo Slack/QuickBooks/HubSpot ni

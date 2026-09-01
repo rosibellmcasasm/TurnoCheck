@@ -18,7 +18,7 @@ import {
 } from "@/lib/supabase/queries";
 import { hoyISO, horaAhora } from "@/lib/app-storage";
 import { esFestivoColombia } from "@/lib/festivos-colombia";
-import { dentroDeAlgunSitio } from "@/lib/geo";
+import { dentroDeAlgunSitio, sitioDentroDeRango } from "@/lib/geo";
 
 type FaseCamara = "cargando-datos" | "cargando" | "lista" | "error" | "capturada";
 type EstadoGeo = "buscando" | "ok" | "error";
@@ -216,6 +216,7 @@ function MarcarContenido() {
         lat: coords?.lat,
         lng: coords?.lng,
         fuera_de_rango: coords ? !dentroDeAlgunSitio(coords, sitios) : false,
+        work_site_id: coords ? sitioDentroDeRango(coords, sitios) : null,
       });
     } else if (turnoAbierto) {
       await marcarSalida(supabase, turnoAbierto.id, horaAhora(), fotoUrl);
