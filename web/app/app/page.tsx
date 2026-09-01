@@ -10,6 +10,8 @@ import {
   ensureCompany,
   listEmployees,
   listTimeEntriesForDate,
+  listTimeEntriesInRange,
+  listTimeEntriesCompletas,
   listWorkSites,
   hasAnyMarcacion,
   getFotoMarcacionUrl,
@@ -23,6 +25,9 @@ import { desglosarMarcacion, type Marcacion } from "@/lib/nomina";
 import { hoyISO } from "@/lib/app-storage";
 import { calcularPuntualidad } from "@/lib/puntualidad";
 import { OnboardingChecklist, type PasoGuia } from "@/components/app/dashboard/OnboardingChecklist";
+import { HorasSemanaChart, type DiaHoras } from "@/components/app/dashboard/HorasSemanaChart";
+import { HorasPorProyectoChart, type ProyectoHoras } from "@/components/app/dashboard/HorasPorProyectoChart";
+import { ProximosFestivos } from "@/components/app/dashboard/ProximosFestivos";
 
 function aMarcacion(t: TimeEntry): Marcacion {
   return {
@@ -72,11 +77,32 @@ function tiempoTranscurrido(fecha: string, horaEntrada: string, ahora: number) {
   return horas > 0 ? `${horas}h ${resto}m` : `${resto}m`;
 }
 
+/** Horas trabajadas de una marcación completa (cruza medianoche sin problema). */
+function horasDeMarcacion(t: TimeEntry): number {
+  if (!t.hora_salida) return 0;
+  const [he, mine] = t.hora_entrada.slice(0, 5).split(":").map(Number);
+  const [hs, mins] = t.hora_salida.slice(0, 5).split(":").map(Number);
+  let minutos = hs * 60 + mins - (he * 60 + mine);
+  if (minutos < 0) minutos += 24 * 60;
+  return minutos / 60;
+}
+
+function lunesDeSemana(d: Date): Date {
+  const copia = new Date(d);
+  const diaSemana = (copia.getDay() + 6) % 7; // lunes = 0
+  copia.setDate(copia.getDate() - diaSemana);
+  return copia;
+}
+
+const DIAS_SEMANA = ["L", "M", "M", "J", "V", "S", "D"];
+
 export default function HoyPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [empleados, setEmpleados] = useState<Employee[]>([]);
   const [entradas, setEntradas] = useState<TimeEntry[]>([]);
   const [sitios, setSitios] = useState<WorkSite[]>([]);
+  const [entradasSemana, setEntradasSemana] = useState<TimeEntry[]>([]);
+  const [entradasCompletas, setEntradasCompletas] = useState<TimeEntry[]>([]);
   const [huboMarcacionAlgunaVez, setHuboMarcacionAlgunaVez] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [verMarcacion, setVerMarcacion] = useState<{ emp: Employee; entry: TimeEntry } | null>(null);
@@ -118,17 +144,29 @@ export default function HoyPage() {
       if (!user) return;
       const empresa = await ensureCompany(supabase, user.id);
       await cerrarTurnosVencidos(supabase, empresa);
-      const [emps, hoy, sitiosData, marcoAlgunaVez] = await Promise.all([
+      const lunes = lunesDeSemana(new Date());
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      const [emps, hoy, sitiosData, marcoAlgunaVez, semana, completas] = await Promise.all([
         listEmployees(supabase, empresa.id),
         listTimeEntriesForDate(supabase, empresa.id, hoyISO()),
         listWorkSites(supabase, empresa.id),
         hasAnyMarcacion(supabase, empresa.id),
+        listTimeEntriesInRange(
+          supabase,
+          empresa.id,
+          lunes.toISOString().slice(0, 10),
+          domingo.toISOString().slice(0, 10),
+        ),
+        listTimeEntriesCompletas(supabase, empresa.id),
       ]);
       setCompany(empresa);
       setEmpleados(emps);
       setEntradas(hoy);
       setSitios(sitiosData);
       setHuboMarcacionAlgunaVez(marcoAlgunaVez);
+      setEntradasSemana(semana);
+      setEntradasCompletas(completas);
       setCargando(false);
     })();
   }, []);
@@ -179,6 +217,29 @@ export default function HoyPage() {
     const valorHora = empleado.salario_mensual / 210;
     return acc + desglose.horasTotal * valorHora;
   }, 0);
+
+  const horasPorDia: DiaHoras[] = (() => {
+    const lunes = lunesDeSemana(new Date());
+    return Array.from({ length: 7 }, (_, i) => {
+      const dia = new Date(lunes);
+      dia.setDate(lunes.getDate() + i);
+      const fechaISO = dia.toISOString().slice(0, 10);
+      const horas = entradasSemana
+        .filter((e) => e.fecha === fechaISO)
+        .reduce((s, e) => s + horasDeMarcacion(e), 0);
+      return { dia: DIAS_SEMANA[i], horas };
+    });
+  })();
+
+  const horasPorProyecto: ProyectoHoras[] = sitios
+    .map((sitio) => ({
+      nombre: sitio.nombre,
+      horas: entradasCompletas
+        .filter((e) => e.work_site_id === sitio.id)
+        .reduce((s, e) => s + horasDeMarcacion(e), 0),
+    }))
+    .filter((p) => p.horas > 0)
+    .sort((a, b) => b.horas - a.horas);
 
   return (
     <div className="px-5 pt-6">
@@ -250,6 +311,30 @@ export default function HoyPage() {
       </div>
 
       <OnboardingChecklist pasos={pasosGuia} />
+
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm md:col-span-2">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            Horas trabajadas esta semana
+          </h2>
+          <div className="mt-2">
+            <HorasSemanaChart datos={horasPorDia} />
+          </div>
+        </div>
+
+        <ProximosFestivos />
+
+        {horasPorProyecto.length > 0 && (
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm md:col-span-3">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              Horas por proyecto
+            </h2>
+            <div className="mt-3">
+              <HorasPorProyectoChart datos={horasPorProyecto} />
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="mt-6 flex items-center justify-between">
         <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
