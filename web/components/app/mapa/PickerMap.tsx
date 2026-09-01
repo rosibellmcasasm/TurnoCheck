@@ -1,9 +1,10 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import L from "leaflet";
 import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from "react-leaflet";
+import { CAPA_MAPA, CAPA_SATELITE, type TipoCapa } from "@/lib/map-tiles";
 
 const iconoPin = L.divIcon({
   className: "",
@@ -45,35 +46,50 @@ export function PickerMap({
   onMover: (lat: number, lng: number) => void;
   centro?: { lat: number; lng: number };
 }) {
+  const [capa, setCapa] = useState<TipoCapa>("mapa");
+  const tile = capa === "satelite" ? CAPA_SATELITE : CAPA_MAPA;
+
   return (
-    <MapContainer
-      center={[centro?.lat ?? lat, centro?.lng ?? lng]}
-      zoom={16}
-      scrollWheelZoom={true}
-      className="h-full w-full"
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <ClicksDelMapa onMover={onMover} />
-      <RecentrarMapa lat={centro?.lat ?? lat} lng={centro?.lng ?? lng} />
-      <Circle
-        center={[lat, lng]}
-        radius={radioMetros}
-        pathOptions={{ color: "#2554c7", fillColor: "#2554c7", fillOpacity: 0.15, weight: 1.5 }}
-      />
-      <Marker
-        position={[lat, lng]}
-        icon={iconoPin}
-        draggable
-        eventHandlers={{
-          dragend: (e) => {
-            const pos = (e.target as L.Marker).getLatLng();
-            onMover(pos.lat, pos.lng);
-          },
-        }}
-      />
-    </MapContainer>
+    <div className="relative h-full w-full">
+      <div className="absolute right-2 top-2 z-[1000] flex gap-0.5 rounded-lg bg-card p-0.5 shadow-md">
+        {(["mapa", "satelite"] as const).map((c) => (
+          <button
+            key={c}
+            onClick={() => setCapa(c)}
+            className={`rounded-md px-2.5 py-1 text-[11px] font-semibold capitalize ${
+              capa === c ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+      <MapContainer
+        center={[centro?.lat ?? lat, centro?.lng ?? lng]}
+        zoom={16}
+        scrollWheelZoom={true}
+        className="h-full w-full"
+      >
+        <TileLayer attribution={tile.attribution} url={tile.url} />
+        <ClicksDelMapa onMover={onMover} />
+        <RecentrarMapa lat={centro?.lat ?? lat} lng={centro?.lng ?? lng} />
+        <Circle
+          center={[lat, lng]}
+          radius={radioMetros}
+          pathOptions={{ color: "#2554c7", fillColor: "#2554c7", fillOpacity: 0.15, weight: 1.5 }}
+        />
+        <Marker
+          position={[lat, lng]}
+          icon={iconoPin}
+          draggable
+          eventHandlers={{
+            dragend: (e) => {
+              const pos = (e.target as L.Marker).getLatLng();
+              onMover(pos.lat, pos.lng);
+            },
+          }}
+        />
+      </MapContainer>
+    </div>
   );
 }
