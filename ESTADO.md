@@ -1,6 +1,18 @@
 # ESTADO — TurnoCheck
 Última actualización: 2026-09-01 | Sesión actual: 1
 
+## Dashboard completo en Hoy: gráfico semanal, festivos, horas por proyecto (2026-09-01)
+- ✅ Gráfico de horas trabajadas por día (L-D, semana actual) con Recharts — datos reales de
+  `time_entries`. Se instaló `recharts` (revisado con `npm audit`, sin vulnerabilidades nuevas).
+- ✅ Tarjeta "Próximos festivos" — se le agregó nombre a cada festivo en
+  `festivos-colombia.ts` (antes solo devolvía fechas) + función `proximosFestivos()`.
+- ✅ Donut "Horas por proyecto" en Hoy — reusa `work_site_id` (de la feature de Proyectos) para
+  mostrar de un vistazo cuánto se ha invertido en cada obra.
+- ✅ Tarjeta "Asistencia en vivo" ahora vive en una grilla `md:grid-cols-3` junto a Nómina — en
+  escritorio queda side-by-side; en celular se apila igual que antes.
+- PENDIENTE: confirmación de la usuaria viendo esto en su celular/computador.
+
+
 ## Menú de escritorio, guía de inicio y Proyectos por obra (2026-09-01)
 - ✅ Menú lateral fijo en pantallas anchas (`Sidebar.tsx`, md+) — reemplaza el menú inferior
   solo en escritorio; el celular no cambió. Contenido de /app centrado con ancho máximo en
