@@ -1,7 +1,26 @@
 # ESTADO — TurnoCheck
 Última actualización: 2026-09-01 | Sesión actual: 1
 
-## Localizaciones con mapa interactivo (2026-09-01)
+## REVERT — se deshizo todo el rediseño de hoy (2026-09-01)
+La usuaria pidió volver a la versión de ayer (commit `c7cbd1a`, 2026-07-31): sintió que fue
+"demasiado cambio de una sola vez" con el rediseño inspirado en Jibble. Se revirtió con un commit
+hacia adelante (`f9449b6`, no se reescribió historial) — el código volvió exactamente a c7cbd1a.
+Lo que se deshizo (queda en el historial de git, recuperable pieza por pieza si se pide):
+- Menú lateral de escritorio (Sidebar.tsx) + layout responsive.
+- Dashboard de Hoy: gráfico de horas, próximos festivos, horas por proyecto, mapa en vivo
+  embebido, resumen "Trabajando/Completaron/Total", filtro Día/Semana/Mes.
+- Guía de inicio (checklist de onboarding con anillo de progreso).
+- Ajustes reorganizado en submenús (Organización/Personas/Localizaciones).
+- Proyectos: cliente final + % de avance por sitio de trabajo, atribución de horas por proyecto.
+- Buscador de localizaciones con mapa interactivo (Nominatim + Leaflet), radio de geovalla por
+  sitio, vista satelital (Esri).
+- **Nada se borró de la base de datos** — las columnas que agregaron esas migraciones
+  (`companies.hora_cierre_automatico`, `work_sites.cliente_final/avance_porcentaje/radio_metros`,
+  `time_entries.work_site_id/cierre_automatico`) siguen ahí, sin usarse, sin riesgo de datos.
+- PRÓXIMO PASO acordado con la usuaria: retomar estas piezas UNA POR UNA, con su aprobación en
+  cada una, en vez de todas juntas.
+
+## Localizaciones con mapa interactivo (2026-09-01) — REVERTIDO, ver bloque de arriba
 - ✅ "Añadir nueva localización" (`/app/ajustes/localizaciones/nuevo`) rehecho como flujo con
   mapa: buscar dirección (Nominatim/OpenStreetMap gratis, proxy propio en `/api/geocode` para
   fijar el User-Agent que exige su política de uso), arrastrar el pin o tocar el mapa, control
