@@ -336,3 +336,51 @@ export async function deleteWorkSite(supabase: SupabaseClient, siteId: string) {
   const { error } = await supabase.from("work_sites").delete().eq("id", siteId);
   if (error) throw error;
 }
+
+export interface WorkSiteActivity {
+  id: string;
+  owner_id: string;
+  work_site_id: string;
+  nombre: string;
+  completada: boolean;
+  created_at: string;
+}
+
+export async function listWorkSiteActivities(supabase: SupabaseClient, workSiteId: string) {
+  const { data, error } = await supabase
+    .from("work_site_activities")
+    .select("*")
+    .eq("work_site_id", workSiteId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data as WorkSiteActivity[];
+}
+
+export async function createWorkSiteActivity(
+  supabase: SupabaseClient,
+  userId: string,
+  workSiteId: string,
+  nombre: string,
+) {
+  const { data, error } = await supabase
+    .from("work_site_activities")
+    .insert({ owner_id: userId, work_site_id: workSiteId, nombre })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as WorkSiteActivity;
+}
+
+export async function toggleWorkSiteActivityCompletada(
+  supabase: SupabaseClient,
+  activityId: string,
+  completada: boolean,
+) {
+  const { error } = await supabase.from("work_site_activities").update({ completada }).eq("id", activityId);
+  if (error) throw error;
+}
+
+export async function deleteWorkSiteActivity(supabase: SupabaseClient, activityId: string) {
+  const { error } = await supabase.from("work_site_activities").delete().eq("id", activityId);
+  if (error) throw error;
+}

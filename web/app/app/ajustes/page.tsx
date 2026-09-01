@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LogOut, ShieldCheck, Plus, Trash2, X, Crosshair } from "lucide-react";
+import { LogOut, ShieldCheck, Plus, Trash2, X, Crosshair, Check, ListChecks } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { createClient } from "@/lib/supabase/client";
@@ -15,8 +15,13 @@ import {
   toggleWorkSiteActivo,
   deleteWorkSite,
   listEmployees,
+  listWorkSiteActivities,
+  createWorkSiteActivity,
+  toggleWorkSiteActivityCompletada,
+  deleteWorkSiteActivity,
   type Company,
   type WorkSite,
+  type WorkSiteActivity,
   type Employee,
   type PeriodoPago,
 } from "@/lib/supabase/queries";
@@ -58,9 +63,15 @@ export default function AjustesPage() {
   const [coordsSitio, setCoordsSitio] = useState<{ lat: number; lng: number } | null>(null);
   const [capturando, setCapturando] = useState(false);
   const [errorSitio, setErrorSitio] = useState<string | null>(null);
+  const [actividades, setActividades] = useState<WorkSiteActivity[]>([]);
+  const [nuevaActividad, setNuevaActividad] = useState("");
 
   async function cargarSitios(supabase: ReturnType<typeof createClient>, companyId: string) {
     setSitios(await listWorkSites(supabase, companyId));
+  }
+
+  async function cargarActividades(supabase: ReturnType<typeof createClient>, workSiteId: string) {
+    setActividades(await listWorkSiteActivities(supabase, workSiteId));
   }
 
   useEffect(() => {
@@ -106,10 +117,12 @@ export default function AjustesPage() {
   function abrirCreacionSitio() {
     setSitioEditando(null);
     limpiarFormularioSitio();
+    setActividades([]);
+    setNuevaActividad("");
     setModalSitioAbierto(true);
   }
 
-  function abrirEdicionSitio(s: WorkSite) {
+  async function abrirEdicionSitio(s: WorkSite) {
     setSitioEditando(s);
     setNombreSitio(s.nombre);
     setCodigoProyecto(s.codigo_proyecto ?? "");
@@ -119,7 +132,31 @@ export default function AjustesPage() {
     setAsignados(s.empleados_asignados ?? []);
     setCoordsSitio({ lat: s.lat, lng: s.lng });
     setErrorSitio(null);
+    setNuevaActividad("");
     setModalSitioAbierto(true);
+    await cargarActividades(createClient(), s.id);
+  }
+
+  async function agregarActividad() {
+    if (!userId || !sitioEditando || nuevaActividad.trim().length < 2) return;
+    const supabase = createClient();
+    await createWorkSiteActivity(supabase, userId, sitioEditando.id, nuevaActividad.trim());
+    setNuevaActividad("");
+    await cargarActividades(supabase, sitioEditando.id);
+  }
+
+  async function alternarActividad(actividad: WorkSiteActivity) {
+    if (!sitioEditando) return;
+    const supabase = createClient();
+    await toggleWorkSiteActivityCompletada(supabase, actividad.id, !actividad.completada);
+    await cargarActividades(supabase, sitioEditando.id);
+  }
+
+  async function eliminarActividad(actividadId: string) {
+    if (!sitioEditando) return;
+    const supabase = createClient();
+    await deleteWorkSiteActivity(supabase, actividadId);
+    await cargarActividades(supabase, sitioEditando.id);
   }
 
   function capturarUbicacion() {
@@ -434,6 +471,69 @@ export default function AjustesPage() {
                   </div>
                 </div>
               )}
+
+              <div className="mt-4 border-t border-border pt-3.5">
+                <div className="flex items-center gap-1.5">
+                  <ListChecks className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-medium text-foreground">Actividades del proyecto</p>
+                </div>
+
+                {!sitioEditando ? (
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Guarda el sitio primero — después podrás agregarle actividades.
+                  </p>
+                ) : (
+                  <>
+                    {actividades.length > 0 && (
+                      <div className="mt-2.5 space-y-1.5">
+                        {actividades.map((a) => (
+                          <div key={a.id} className="flex items-center gap-2 rounded-lg border border-border bg-background p-2">
+                            <button
+                              onClick={() => alternarActividad(a)}
+                              aria-label={a.completada ? "Marcar como pendiente" : "Marcar como hecha"}
+                              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                                a.completada ? "border-success bg-success text-white" : "border-border"
+                              }`}
+                            >
+                              {a.completada && <Check className="h-3 w-3" strokeWidth={3} />}
+                            </button>
+                            <span
+                              className={`min-w-0 flex-1 truncate text-sm ${
+                                a.completada ? "text-muted-foreground line-through" : "text-foreground"
+                              }`}
+                            >
+                              {a.nombre}
+                            </span>
+                            <button
+                              onClick={() => eliminarActividad(a.id)}
+                              aria-label={`Eliminar actividad ${a.nombre}`}
+                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-2.5 flex gap-2">
+                      <input
+                        value={nuevaActividad}
+                        onChange={(e) => setNuevaActividad(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && agregarActividad()}
+                        placeholder="Ej: Cimentación"
+                        className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary"
+                      />
+                      <button
+                        onClick={agregarActividad}
+                        disabled={nuevaActividad.trim().length < 2}
+                        className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Agregar
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
 
               <motion.button
                 whileTap={{ scale: 0.97 }}
