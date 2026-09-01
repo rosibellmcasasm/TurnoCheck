@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Camera, MapPin, ArrowLeft, Check, AlertTriangle } from "lucide-react";
+import { Camera, MapPin, ArrowLeft, Check, AlertTriangle, LogOut, MoveRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   ensureCompany,
@@ -11,6 +11,7 @@ import {
   listWorkSites,
   crearMarcacionEntrada,
   marcarSalida,
+  crearCheckpoint,
   type Company,
   type Employee,
   type TimeEntry,
@@ -18,10 +19,17 @@ import {
 } from "@/lib/supabase/queries";
 import { hoyISO, horaAhora } from "@/lib/app-storage";
 import { esFestivoColombia } from "@/lib/festivos-colombia";
-import { dentroDeAlgunSitio } from "@/lib/geo";
+import { dentroDeAlgunSitio, sitioDentroDeRango } from "@/lib/geo";
 
-type FaseCamara = "cargando-datos" | "cargando" | "lista" | "error" | "capturada";
+type FaseCamara = "cargando-datos" | "eligiendo" | "cargando" | "lista" | "error" | "capturada";
 type EstadoGeo = "buscando" | "ok" | "error";
+type Accion = "entrada" | "salida" | "movimiento";
+
+const ETIQUETA_ACCION: Record<Accion, string> = {
+  entrada: "entrada",
+  salida: "salida",
+  movimiento: "cambio de sitio",
+};
 
 function MarcarContenido() {
   const router = useRouter();
@@ -32,6 +40,7 @@ function MarcarContenido() {
   const streamRef = useRef<MediaStream | null>(null);
 
   const [fase, setFase] = useState<FaseCamara>("cargando-datos");
+  const [accion, setAccion] = useState<Accion | null>(null);
   const [foto, setFoto] = useState<Blob | null>(null);
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [geo, setGeo] = useState<EstadoGeo>("buscando");
@@ -60,16 +69,30 @@ function MarcarContenido() {
         listTimeEntriesForDate(supabase, empresa.id, hoyISO()),
         listWorkSites(supabase, empresa.id),
       ]);
+      const abierto = hoy.find((e) => e.employee_id === empleadoId && !e.hora_salida) ?? null;
       setUserId(user.id);
       setCompany(empresa);
       setEmpleado(emps.find((e) => e.id === empleadoId) ?? null);
-      setTurnoAbierto(hoy.find((e) => e.employee_id === empleadoId && !e.hora_salida) ?? null);
+      setTurnoAbierto(abierto);
       setSitios(sitiosTrabajo.filter((s) => s.activo));
-      setFase("cargando");
+      // Sin turno abierto solo hay una opción posible (entrada) — se salta
+      // la pantalla de elegir. Con turno abierto, el empleado puede seguir
+      // trabajando en otro sitio (movimiento) o terminar el día (salida).
+      if (abierto) {
+        setFase("eligiendo");
+      } else {
+        setAccion("entrada");
+        setFase("cargando");
+      }
     })();
   }, [empleadoId]);
 
-  const tipo: "entrada" | "salida" = turnoAbierto ? "salida" : "entrada";
+  function elegirAccion(a: Accion) {
+    setAccion(a);
+    setFase("cargando");
+  }
+
+  const sitioId = coords ? sitioDentroDeRango(coords, sitios) : null;
 
   const camaraSolicitadaRef = useRef(false);
 
@@ -193,7 +216,7 @@ function MarcarContenido() {
   }
 
   async function confirmar() {
-    if (!empleado || !company || !userId) return;
+    if (!empleado || !company || !userId || !accion) return;
     setGuardando(true);
     const supabase = createClient();
 
@@ -206,7 +229,9 @@ function MarcarContenido() {
       if (!error) fotoUrl = path;
     }
 
-    if (tipo === "entrada") {
+    const fueraDeRango = coords ? !dentroDeAlgunSitio(coords, sitios) : false;
+
+    if (accion === "entrada") {
       await crearMarcacionEntrada(supabase, userId, company.id, {
         employee_id: empleado.id,
         fecha: hoyISO(),
@@ -215,10 +240,20 @@ function MarcarContenido() {
         foto_url: fotoUrl,
         lat: coords?.lat,
         lng: coords?.lng,
-        fuera_de_rango: coords ? !dentroDeAlgunSitio(coords, sitios) : false,
+        fuera_de_rango: fueraDeRango,
+        work_site_id: sitioId,
       });
-    } else if (turnoAbierto) {
+    } else if (accion === "salida" && turnoAbierto) {
       await marcarSalida(supabase, turnoAbierto.id, horaAhora(), fotoUrl);
+    } else if (accion === "movimiento" && turnoAbierto) {
+      await crearCheckpoint(supabase, userId, turnoAbierto.id, {
+        work_site_id: sitioId,
+        hora: horaAhora(),
+        foto_url: fotoUrl,
+        lat: coords?.lat,
+        lng: coords?.lng,
+        fuera_de_rango: fueraDeRango,
+      });
     }
     router.push("/app");
   }
@@ -242,6 +277,52 @@ function MarcarContenido() {
     );
   }
 
+  if (fase === "eligiendo") {
+    return (
+      <div className="flex min-h-dvh flex-col bg-background">
+        <div className="flex items-center gap-3 px-5 pt-6">
+          <button onClick={() => router.push("/app")} aria-label="Volver">
+            <ArrowLeft className="h-5 w-5 text-muted-foreground" />
+          </button>
+          <div>
+            <p className="text-xs text-muted-foreground">Turno de</p>
+            <h1 className="font-display text-base font-bold text-foreground">{empleado.nombre}</h1>
+          </div>
+        </div>
+
+        <div className="flex flex-1 flex-col justify-center gap-3 px-5">
+          <p className="mb-1 text-center text-sm text-muted-foreground">¿Qué quieres hacer?</p>
+          <button
+            onClick={() => elegirAccion("movimiento")}
+            className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-sm"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+              <MoveRight className="h-5 w-5" />
+            </span>
+            <span>
+              <span className="block text-sm font-semibold text-foreground">Cambié de sitio</span>
+              <span className="block text-xs text-muted-foreground">
+                Sigo trabajando, me moví a otro proyecto — el turno sigue abierto.
+              </span>
+            </span>
+          </button>
+          <button
+            onClick={() => elegirAccion("salida")}
+            className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-sm"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <LogOut className="h-5 w-5" />
+            </span>
+            <span>
+              <span className="block text-sm font-semibold text-foreground">Marcar salida</span>
+              <span className="block text-xs text-muted-foreground">Terminé mi jornada de hoy.</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-dvh flex-col bg-background">
       <div className="flex items-center gap-3 px-5 pt-6">
@@ -250,7 +331,7 @@ function MarcarContenido() {
         </button>
         <div>
           <p className="text-xs text-muted-foreground">
-            Marcando {tipo === "entrada" ? "entrada" : "salida"} de
+            Marcando {accion ? ETIQUETA_ACCION[accion] : ""} de
           </p>
           <h1 className="font-display text-base font-bold text-foreground">{empleado.nombre}</h1>
         </div>
@@ -315,7 +396,7 @@ function MarcarContenido() {
           );
         })()}
 
-        {tipo === "entrada" && (
+        {accion === "entrada" && (
           <label className="mt-3 flex items-center gap-2 px-1 text-sm text-foreground">
             <input
               type="checkbox"
@@ -340,7 +421,7 @@ function MarcarContenido() {
               className="flex h-13 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground"
               style={{ height: 52 }}
             >
-              <Camera className="h-4.5 w-4.5" /> Tomar foto y marcar {tipo}
+              <Camera className="h-4.5 w-4.5" /> Tomar foto y marcar {accion ? ETIQUETA_ACCION[accion] : ""}
             </button>
           )}
           {fase === "error" && (
@@ -358,7 +439,7 @@ function MarcarContenido() {
               className="flex h-13 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-60"
               style={{ height: 52 }}
             >
-              Confirmar {tipo}
+              Confirmar {accion ? ETIQUETA_ACCION[accion] : ""}
             </button>
           )}
         </div>

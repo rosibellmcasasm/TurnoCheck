@@ -24,3 +24,19 @@ export function dentroDeAlgunSitio(
   if (sitios.length === 0) return true;
   return sitios.some((s) => distanciaMetros(punto, s) <= RADIO_GEOCERCA_METROS);
 }
+
+/** A qué sitio/proyecto pertenece un punto — el sitio activo más cercano dentro del radio de
+ *  la geocerca. null si no hay ninguno dentro de rango (o no hay sitios configurados). */
+export function sitioDentroDeRango(
+  punto: { lat: number; lng: number },
+  sitios: { id: string; lat: number; lng: number }[],
+): string | null {
+  let mejor: { id: string; distancia: number } | null = null;
+  for (const s of sitios) {
+    const distancia = distanciaMetros(punto, s);
+    if (distancia <= RADIO_GEOCERCA_METROS && (!mejor || distancia < mejor.distancia)) {
+      mejor = { id: s.id, distancia };
+    }
+  }
+  return mejor?.id ?? null;
+}

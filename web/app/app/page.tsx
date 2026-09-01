@@ -10,10 +10,14 @@ import {
   ensureCompany,
   listEmployees,
   listTimeEntriesForDate,
+  listWorkSites,
+  listCheckpoints,
   getFotoMarcacionUrl,
   type Company,
   type Employee,
   type TimeEntry,
+  type WorkSite,
+  type TimeEntryCheckpoint,
 } from "@/lib/supabase/queries";
 import { desglosarMarcacion, type Marcacion } from "@/lib/nomina";
 import { hoyISO } from "@/lib/app-storage";
@@ -63,20 +67,24 @@ export default function HoyPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [empleados, setEmpleados] = useState<Employee[]>([]);
   const [entradas, setEntradas] = useState<TimeEntry[]>([]);
+  const [sitios, setSitios] = useState<WorkSite[]>([]);
   const [cargando, setCargando] = useState(true);
   const [verMarcacion, setVerMarcacion] = useState<{ emp: Employee; entry: TimeEntry } | null>(null);
   const [fotoEntradaUrl, setFotoEntradaUrl] = useState<string | null>(null);
   const [fotoSalidaUrl, setFotoSalidaUrl] = useState<string | null>(null);
   const [cargandoFoto, setCargandoFoto] = useState(false);
+  const [movimientos, setMovimientos] = useState<TimeEntryCheckpoint[]>([]);
 
   async function abrirMarcacion(emp: Employee, entry: TimeEntry) {
     setVerMarcacion({ emp, entry });
     setFotoEntradaUrl(null);
     setFotoSalidaUrl(null);
+    setMovimientos([]);
+    const supabase = createClient();
+    listCheckpoints(supabase, entry.id).then(setMovimientos);
     if (!entry.foto_url && !entry.foto_salida_url) return;
     setCargandoFoto(true);
     try {
-      const supabase = createClient();
       const [entradaUrl, salidaUrl] = await Promise.all([
         entry.foto_url ? getFotoMarcacionUrl(supabase, entry.foto_url).catch(() => null) : null,
         entry.foto_salida_url ? getFotoMarcacionUrl(supabase, entry.foto_salida_url).catch(() => null) : null,
@@ -96,13 +104,15 @@ export default function HoyPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
       const empresa = await ensureCompany(supabase, user.id);
-      const [emps, hoy] = await Promise.all([
+      const [emps, hoy, sitiosTrabajo] = await Promise.all([
         listEmployees(supabase, empresa.id),
         listTimeEntriesForDate(supabase, empresa.id, hoyISO()),
+        listWorkSites(supabase, empresa.id),
       ]);
       setCompany(empresa);
       setEmpleados(emps);
       setEntradas(hoy);
+      setSitios(sitiosTrabajo);
       setCargando(false);
     })();
   }, []);
@@ -357,6 +367,24 @@ export default function HoyPage() {
                   </div>
                 )}
               </div>
+
+              {movimientos.length > 0 && (
+                <div className="mt-3 rounded-lg bg-secondary p-2.5">
+                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Se movió de sitio
+                  </p>
+                  <div className="space-y-1">
+                    {movimientos.map((mv) => (
+                      <div key={mv.id} className="flex justify-between text-xs">
+                        <span className="text-foreground">
+                          {sitios.find((s) => s.id === mv.work_site_id)?.nombre ?? "Sitio sin registrar"}
+                        </span>
+                        <span className="tabular text-muted-foreground">{mv.hora.slice(0, 5)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {verMarcacion.entry.lat && verMarcacion.entry.lng && (
                 <a

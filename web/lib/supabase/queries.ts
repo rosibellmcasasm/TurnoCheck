@@ -50,6 +50,20 @@ export interface TimeEntry {
   lat: number | null;
   lng: number | null;
   fuera_de_rango: boolean;
+  work_site_id: string | null;
+  created_at: string;
+}
+
+export interface TimeEntryCheckpoint {
+  id: string;
+  owner_id: string;
+  time_entry_id: string;
+  work_site_id: string | null;
+  hora: string;
+  foto_url: string | null;
+  lat: number | null;
+  lng: number | null;
+  fuera_de_rango: boolean;
   created_at: string;
 }
 
@@ -235,6 +249,7 @@ export async function crearMarcacionEntrada(
     lat?: number;
     lng?: number;
     fuera_de_rango?: boolean;
+    work_site_id?: string | null;
   },
 ) {
   const { data, error } = await supabase
@@ -257,6 +272,41 @@ export async function marcarSalida(
     .update({ hora_salida: horaSalida, foto_salida_url: fotoSalidaUrl ?? null })
     .eq("id", timeEntryId);
   if (error) throw error;
+}
+
+/** Registra un "movimiento" dentro de un turno abierto (el empleado se mueve a otro sitio de
+ *  trabajo sin cerrar el turno) — pensado para obra civil, donde un empleado puede pasar por
+ *  varios proyectos el mismo día. */
+export async function crearCheckpoint(
+  supabase: SupabaseClient,
+  userId: string,
+  timeEntryId: string,
+  input: {
+    work_site_id: string | null;
+    hora: string;
+    foto_url?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    fuera_de_rango?: boolean;
+  },
+) {
+  const { data, error } = await supabase
+    .from("time_entry_checkpoints")
+    .insert({ owner_id: userId, time_entry_id: timeEntryId, ...input })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as TimeEntryCheckpoint;
+}
+
+export async function listCheckpoints(supabase: SupabaseClient, timeEntryId: string) {
+  const { data, error } = await supabase
+    .from("time_entry_checkpoints")
+    .select("*")
+    .eq("time_entry_id", timeEntryId)
+    .order("hora", { ascending: true });
+  if (error) throw error;
+  return data as TimeEntryCheckpoint[];
 }
 
 /** El bucket "marcaciones" es privado — para mostrar la foto hay que pedir
