@@ -10,6 +10,7 @@ import {
   ensureCompany,
   listEmployees,
   listTimeEntriesForDate,
+  listTimeEntriesInRange,
   listWorkSites,
   listCheckpoints,
   getFotoMarcacionUrl,
@@ -19,10 +20,12 @@ import {
   type WorkSite,
   type TimeEntryCheckpoint,
 } from "@/lib/supabase/queries";
-import { desglosarMarcacion, type Marcacion } from "@/lib/nomina";
+import { desglosarMarcacion, agruparPorSemana, liquidarSemana, type Marcacion } from "@/lib/nomina";
 import { hoyISO } from "@/lib/app-storage";
 import { calcularPuntualidad } from "@/lib/puntualidad";
 import { horarioDelDia } from "@/lib/horario-semanal";
+import { HorasRegistradasChart, type BarraHoras } from "@/components/app/dashboard/HorasRegistradasChart";
+import { ProximosFestivos } from "@/components/app/dashboard/ProximosFestivos";
 
 function aMarcacion(t: TimeEntry, empleado?: Employee): Marcacion {
   return {
@@ -35,6 +38,47 @@ function aMarcacion(t: TimeEntry, empleado?: Employee): Marcacion {
     descansoInicio: empleado?.descanso_inicio,
     descansoFin: empleado?.descanso_fin,
   };
+}
+
+const DIAS_SEMANA = ["L", "M", "M", "J", "V", "S", "D"];
+
+function lunesDeSemana(d: Date): Date {
+  const copia = new Date(d);
+  const diaSemana = (copia.getDay() + 6) % 7; // lunes = 0
+  copia.setDate(copia.getDate() - diaSemana);
+  return copia;
+}
+
+function horasDeMarcacionSimple(m: Marcacion): number {
+  const desglose = desglosarMarcacion(m);
+  return desglose ? desglose.horasTotal : 0;
+}
+
+/** Duración bruta del turno (entrada a salida) SIN restar el descanso — se usa para calcular
+ *  cuánto duró el descanso: bruta - horasTotal (que ya tiene el descanso restado). */
+function duracionBrutaHoras(m: Marcacion): number {
+  if (!m.horaSalida) return 0;
+  const [he, mine] = m.horaEntrada.split(":").map(Number);
+  const [hs, mins] = m.horaSalida.split(":").map(Number);
+  let minutos = hs * 60 + mins - (he * 60 + mine);
+  if (minutos < 0) minutos += 24 * 60;
+  return minutos / 60;
+}
+
+function rangoDePeriodo(periodo: "dia" | "semana" | "mes", hoyDate: Date) {
+  if (periodo === "dia") {
+    const iso = hoyDate.toISOString().slice(0, 10);
+    return { desde: iso, hasta: iso };
+  }
+  if (periodo === "semana") {
+    const lunes = lunesDeSemana(hoyDate);
+    const domingo = new Date(lunes);
+    domingo.setDate(lunes.getDate() + 6);
+    return { desde: lunes.toISOString().slice(0, 10), hasta: domingo.toISOString().slice(0, 10) };
+  }
+  const inicio = new Date(hoyDate.getFullYear(), hoyDate.getMonth(), 1);
+  const fin = new Date(hoyDate.getFullYear(), hoyDate.getMonth() + 1, 0);
+  return { desde: inicio.toISOString().slice(0, 10), hasta: fin.toISOString().slice(0, 10) };
 }
 
 function estadoDeHoy(empleadoId: string, entradas: TimeEntry[]) {
@@ -74,6 +118,8 @@ export default function HoyPage() {
   const [fotoSalidaUrl, setFotoSalidaUrl] = useState<string | null>(null);
   const [cargandoFoto, setCargandoFoto] = useState(false);
   const [movimientos, setMovimientos] = useState<TimeEntryCheckpoint[]>([]);
+  const [entradasAmplias, setEntradasAmplias] = useState<TimeEntry[]>([]);
+  const [periodoVista, setPeriodoVista] = useState<"dia" | "semana" | "mes">("semana");
 
   async function abrirMarcacion(emp: Employee, entry: TimeEntry) {
     setVerMarcacion({ emp, entry });
@@ -104,15 +150,25 @@ export default function HoyPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
       const empresa = await ensureCompany(supabase, user.id);
-      const [emps, hoy, sitiosTrabajo] = await Promise.all([
+      const hoyDate = new Date();
+      const hace35 = new Date(hoyDate);
+      hace35.setDate(hoyDate.getDate() - 35);
+      const [emps, hoy, sitiosTrabajo, entradasRango] = await Promise.all([
         listEmployees(supabase, empresa.id),
         listTimeEntriesForDate(supabase, empresa.id, hoyISO()),
         listWorkSites(supabase, empresa.id),
+        listTimeEntriesInRange(
+          supabase,
+          empresa.id,
+          hace35.toISOString().slice(0, 10),
+          hoyDate.toISOString().slice(0, 10),
+        ),
       ]);
       setCompany(empresa);
       setEmpleados(emps);
       setEntradas(hoy);
       setSitios(sitiosTrabajo);
+      setEntradasAmplias(entradasRango);
       setCargando(false);
     })();
   }, []);
@@ -141,6 +197,80 @@ export default function HoyPage() {
     return acc + desglose.horasTotal * valorHora;
   }, 0);
 
+  const empleadosPorId = new Map(empleados.map((e) => [e.id, e]));
+  const marcacionesAmplias = entradasAmplias.map((t) => aMarcacion(t, empleadosPorId.get(t.employee_id)));
+  const hoyDate = new Date();
+
+  // Gráfico "Horas registradas": día = por empleado hoy; semana = 7 barras (L-D);
+  // mes = una barra por cada día del mes actual (igual que el panel de Jibble).
+  const horasChart: BarraHoras[] = (() => {
+    if (periodoVista === "dia") {
+      return empleadosActivos
+        .map((emp) => ({
+          etiqueta: emp.nombre.split(" ")[0],
+          horas: entradas
+            .filter((e) => e.employee_id === emp.id)
+            .reduce((s, e) => s + horasDeMarcacionSimple(aMarcacion(e, emp)), 0),
+        }))
+        .filter((d) => d.horas > 0);
+    }
+    if (periodoVista === "mes") {
+      const finMes = new Date(hoyDate.getFullYear(), hoyDate.getMonth() + 1, 0).getDate();
+      const porDia = new Array(finMes).fill(0);
+      marcacionesAmplias.forEach((m) => {
+        const [y, mo, d] = m.fecha.split("-").map(Number);
+        if (y !== hoyDate.getFullYear() || mo - 1 !== hoyDate.getMonth()) return;
+        porDia[d - 1] += horasDeMarcacionSimple(m);
+      });
+      return porDia.map((horas, i) => {
+        const dia = new Date(hoyDate.getFullYear(), hoyDate.getMonth(), i + 1);
+        return { etiqueta: DIAS_SEMANA[(dia.getDay() + 6) % 7], horas };
+      });
+    }
+    const lunes = lunesDeSemana(hoyDate);
+    return Array.from({ length: 7 }, (_, i) => {
+      const dia = new Date(lunes);
+      dia.setDate(lunes.getDate() + i);
+      const fechaISO = dia.toISOString().slice(0, 10);
+      const horas = marcacionesAmplias
+        .filter((m) => m.fecha === fechaISO)
+        .reduce((s, m) => s + horasDeMarcacionSimple(m), 0);
+      return { etiqueta: DIAS_SEMANA[i], horas };
+    });
+  })();
+
+  // Resumen de Horas trabajadas / Descansos, según el período elegido.
+  const { desde, hasta } = rangoDePeriodo(periodoVista, hoyDate);
+  const marcacionesPeriodo = marcacionesAmplias.filter(
+    (m) => m.fecha >= desde && m.fecha <= hasta && m.horaSalida,
+  );
+  let horasTrabajadas = 0;
+  let horasDescanso = 0;
+  for (const m of marcacionesPeriodo) {
+    const horas = horasDeMarcacionSimple(m);
+    horasTrabajadas += horas;
+    horasDescanso += Math.max(0, duracionBrutaHoras(m) - horas);
+  }
+
+  // Horas extra: SIEMPRE de la semana actual (se calculan por semana, como exige la ley —
+  // no se pueden repartir por día ni por mes de forma exacta).
+  const semanaActualKey = lunesDeSemana(hoyDate).toISOString().slice(0, 10);
+  const semanasAmplias = agruparPorSemana(marcacionesAmplias);
+  const marcacionesSemanaActual = (semanasAmplias[semanaActualKey] ?? []).filter((m) => m.horaSalida);
+  let horasExtraSemana = 0;
+  for (const emp of empleadosActivos) {
+    const propias = marcacionesSemanaActual.filter((m) => m.empleadoId === emp.id);
+    if (propias.length === 0) continue;
+    const liq = liquidarSemana(propias, emp.salario_mensual);
+    horasExtraSemana += liq.horasExtraDiurnas + liq.horasExtraNocturnas;
+  }
+
+  const formatoHoras = (h: number) => {
+    const horas = Math.floor(h);
+    const minutos = Math.round((h - horas) * 60);
+    return `${horas}h ${minutos}m`;
+  };
+
   return (
     <div className="px-5 pt-6">
       <p className="text-sm text-muted-foreground">
@@ -164,6 +294,62 @@ export default function HoyPage() {
         <p className="mt-1 text-xs opacity-85">
           {yaMarcaron} de {empleadosActivos.length} empleados ya marcaron
         </p>
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm md:col-span-2">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              Horas registradas
+            </h2>
+            <div className="flex gap-0.5 rounded-lg bg-secondary p-0.5">
+              {(["dia", "semana", "mes"] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriodoVista(p)}
+                  className={`rounded-md px-2 py-1 text-[11px] font-semibold capitalize transition-colors ${
+                    periodoVista === p ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                  }`}
+                >
+                  {p === "dia" ? "Día" : p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-3 divide-x divide-border">
+            <div>
+              <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-success" /> Trabajadas
+              </span>
+              <p className="tabular mt-1 text-sm font-bold text-foreground">{formatoHoras(horasTrabajadas)}</p>
+            </div>
+            <div className="pl-3">
+              <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-warning" /> Descansos
+              </span>
+              <p className="tabular mt-1 text-sm font-bold text-foreground">{formatoHoras(horasDescanso)}</p>
+            </div>
+            <div className="pl-3">
+              <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-destructive" /> Extra (semana)
+              </span>
+              <p className="tabular mt-1 text-sm font-bold text-foreground">{formatoHoras(horasExtraSemana)}</p>
+            </div>
+          </div>
+
+          <div className="mt-3">
+            {horasChart.every((d) => d.horas === 0) ? (
+              <div className="flex h-40 items-center justify-center text-xs text-muted-foreground">
+                Sin horas registradas en este período.
+              </div>
+            ) : (
+              <HorasRegistradasChart datos={horasChart} />
+            )}
+          </div>
+        </div>
+
+        <ProximosFestivos />
       </div>
 
       <div className="mt-6 flex items-center justify-between">
