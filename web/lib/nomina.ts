@@ -179,6 +179,26 @@ export function liquidarSemana(marcaciones: Marcacion[], salarioMensual: number)
   };
 }
 
+/** Suma varias liquidaciones de semana (ej. las semanas dentro de un mismo período de pago,
+ *  o un rango de fechas de reporte que abarca más de una semana). */
+export function sumarLiquidaciones(liqs: LiquidacionSemana[]): LiquidacionSemana {
+  const suma = (campo: keyof LiquidacionSemana) => liqs.reduce((s, l) => s + l[campo], 0);
+  return {
+    horasOrdinariasDiurnas: suma("horasOrdinariasDiurnas"),
+    horasOrdinariasNocturnas: suma("horasOrdinariasNocturnas"),
+    horasExtraDiurnas: suma("horasExtraDiurnas"),
+    horasExtraNocturnas: suma("horasExtraNocturnas"),
+    horasDominicalFestivo: suma("horasDominicalFestivo"),
+    pagoOrdinarioDiurno: suma("pagoOrdinarioDiurno"),
+    pagoOrdinarioNocturno: suma("pagoOrdinarioNocturno"),
+    pagoExtraDiurno: suma("pagoExtraDiurno"),
+    pagoExtraNocturno: suma("pagoExtraNocturno"),
+    pagoRecargoDominicalFestivo: suma("pagoRecargoDominicalFestivo"),
+    total: suma("total"),
+    valorHoraOrdinaria: liqs.length > 0 ? liqs[0].valorHoraOrdinaria : 0,
+  };
+}
+
 /** Agrupa marcaciones por semana ISO (lunes a domingo) para poder liquidar semana por semana. */
 export function agruparPorSemana(marcaciones: Marcacion[]): Record<string, Marcacion[]> {
   const grupos: Record<string, Marcacion[]> = {};

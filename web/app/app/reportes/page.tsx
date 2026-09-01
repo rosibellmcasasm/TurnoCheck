@@ -12,7 +12,14 @@ import {
   type PeriodoPago,
   type TimeEntry,
 } from "@/lib/supabase/queries";
-import { agruparPorSemana, liquidarSemana, type LiquidacionSemana, type Marcacion } from "@/lib/nomina";
+import {
+  agruparPorSemana,
+  liquidarSemana,
+  sumarLiquidaciones,
+  type LiquidacionSemana,
+  type Marcacion,
+} from "@/lib/nomina";
+import { PanelAsistencia } from "@/components/app/reportes/PanelAsistencia";
 
 async function descargarPdfSemana(
   nombreNegocio: string,
@@ -150,30 +157,13 @@ function formatearPeriodo(clave: string, periodo: PeriodoPago) {
   return `${fmt(inicio)} – ${fmt(fin)}`;
 }
 
-function sumarLiquidaciones(liqs: LiquidacionSemana[]): LiquidacionSemana {
-  const suma = (campo: keyof LiquidacionSemana) => liqs.reduce((s, l) => s + l[campo], 0);
-  return {
-    horasOrdinariasDiurnas: suma("horasOrdinariasDiurnas"),
-    horasOrdinariasNocturnas: suma("horasOrdinariasNocturnas"),
-    horasExtraDiurnas: suma("horasExtraDiurnas"),
-    horasExtraNocturnas: suma("horasExtraNocturnas"),
-    horasDominicalFestivo: suma("horasDominicalFestivo"),
-    pagoOrdinarioDiurno: suma("pagoOrdinarioDiurno"),
-    pagoOrdinarioNocturno: suma("pagoOrdinarioNocturno"),
-    pagoExtraDiurno: suma("pagoExtraDiurno"),
-    pagoExtraNocturno: suma("pagoExtraNocturno"),
-    pagoRecargoDominicalFestivo: suma("pagoRecargoDominicalFestivo"),
-    total: suma("total"),
-    valorHoraOrdinaria: liqs.length > 0 ? liqs[0].valorHoraOrdinaria : 0,
-  };
-}
-
 export default function ReportesPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [empleados, setEmpleados] = useState<Employee[]>([]);
   const [marcaciones, setMarcaciones] = useState<Marcacion[]>([]);
   const [cargando, setCargando] = useState(true);
   const [generandoPdf, setGenerandoPdf] = useState<string | null>(null);
+  const [pestana, setPestana] = useState<"nomina" | "asistencia">("nomina");
 
   useEffect(() => {
     const supabase = createClient();
@@ -256,6 +246,20 @@ export default function ReportesPage() {
     <div className="px-5 pt-6">
       <h1 className="font-display text-xl font-extrabold text-foreground">Reportes</h1>
 
+      <div className="mt-3 flex gap-2 rounded-lg bg-secondary p-1">
+        {(["nomina", "asistencia"] as const).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPestana(p)}
+            className={`h-9 flex-1 rounded-md text-sm font-semibold capitalize ${
+              pestana === p ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+            }`}
+          >
+            {p === "nomina" ? "Nómina" : "Asistencia"}
+          </button>
+        ))}
+      </div>
+
       <div className="mt-3 flex items-start gap-2 rounded-xl bg-accent p-3.5 text-accent-foreground">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <p className="text-xs leading-snug">
@@ -264,7 +268,9 @@ export default function ReportesPage() {
         </p>
       </div>
 
-      {periodosOrdenados.length === 0 ? (
+      {pestana === "asistencia" ? (
+        company && <PanelAsistencia company={company} empleados={empleados} />
+      ) : periodosOrdenados.length === 0 ? (
         <div className="mt-6 flex min-h-[40vh] flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
           <p className="text-sm text-muted-foreground">
             Todavía no hay marcaciones completas para liquidar. Marca la salida de un
