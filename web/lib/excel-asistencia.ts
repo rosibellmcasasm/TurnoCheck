@@ -15,8 +15,10 @@ function nombreHoja(nombre: string, usados: Set<string>): string {
   return candidato;
 }
 
+/** Cada tipo de reporte se agrega como sus propias hojas dentro del MISMO archivo — se pueden
+ *  elegir varios tipos a la vez (ej. las 3) y salen todas juntas en un solo Excel. */
 export async function generarExcelAsistencia(opts: {
-  tipo: TipoReporteAsistencia;
+  tipos: TipoReporteAsistencia[];
   nombreNegocio: string;
   rangoTexto: string;
   resumen?: ResumenEmpleado[];
@@ -25,11 +27,11 @@ export async function generarExcelAsistencia(opts: {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = "TurnoCheck";
+  const usadas = new Set<string>();
 
-  if (opts.tipo === "resumen") {
-    const usados = new Set<string>();
+  if (opts.tipos.includes("resumen")) {
     for (const r of opts.resumen ?? []) {
-      const ws = wb.addWorksheet(nombreHoja(r.emp.nombre, usados));
+      const ws = wb.addWorksheet(nombreHoja(r.emp.nombre, usadas));
       ws.addRow([opts.nombreNegocio]);
       ws.addRow([`Resumen de asistencia — ${r.emp.nombre}`]);
       ws.addRow([`Período: ${opts.rangoTexto}`]);
@@ -67,11 +69,14 @@ export async function generarExcelAsistencia(opts: {
       ws.columns.forEach((c) => (c.width = 16));
     }
     if ((opts.resumen ?? []).length === 0) {
-      wb.addWorksheet("Resumen").addRow(["Sin marcaciones completas en este período."]);
+      wb.addWorksheet(nombreHoja("Resumen", usadas)).addRow(["Sin marcaciones completas en este período."]);
     }
-  } else {
-    const esHojas = opts.tipo === "hojas";
-    const ws = wb.addWorksheet(esHojas ? "Hojas de horas" : "Entradas de tiempo");
+  }
+
+  for (const tipo of ["hojas", "entradas"] as const) {
+    if (!opts.tipos.includes(tipo)) continue;
+    const esHojas = tipo === "hojas";
+    const ws = wb.addWorksheet(nombreHoja(esHojas ? "Hojas de horas" : "Entradas de tiempo", usadas));
     ws.addRow([opts.nombreNegocio]);
     ws.addRow([esHojas ? "Hojas de horas" : "Entradas de tiempo", `Período: ${opts.rangoTexto}`]);
     ws.addRow([]);

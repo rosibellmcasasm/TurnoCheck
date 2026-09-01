@@ -69,7 +69,7 @@ function calcularRango(
 }
 
 export function PanelAsistencia({ company, empleados }: { company: Company; empleados: Employee[] }) {
-  const [tipo, setTipo] = useState<TipoReporteAsistencia>("resumen");
+  const [tipos, setTipos] = useState<TipoReporteAsistencia[]>(["resumen"]);
   const [periodo, setPeriodo] = useState<PeriodoReporteAsistencia>("semana");
   const [desdePersonalizado, setDesdePersonalizado] = useState("");
   const [hastaPersonalizado, setHastaPersonalizado] = useState("");
@@ -82,10 +82,18 @@ export function PanelAsistencia({ company, empleados }: { company: Company; empl
     setEmpleadoIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
+  function alternarTipo(t: TipoReporteAsistencia) {
+    setTipos((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  }
+
   const rango = calcularRango(periodo, desdePersonalizado, hastaPersonalizado);
 
   async function descargar() {
     setError(null);
+    if (tipos.length === 0) {
+      setError("Elige al menos un tipo de reporte.");
+      return;
+    }
     if (periodo === "personalizado" && (!desdePersonalizado || !hastaPersonalizado)) {
       setError("Elige la fecha de inicio y fin.");
       return;
@@ -103,13 +111,11 @@ export function PanelAsistencia({ company, empleados }: { company: Company; empl
       const idsOk = new Set(empleadosOk.map((e) => e.id));
       const entradasOk = entradas.filter((t) => idsOk.has(t.employee_id));
 
-      if (tipo === "resumen") {
-        const resumen = construirResumenPorEmpleado(entradasOk, empleadosOk);
-        await generarExcelAsistencia({ tipo, nombreNegocio: company.name, rangoTexto: rango.texto, resumen });
-      } else {
-        const filas = construirFilasDiarias(entradasOk, empleadosOk);
-        await generarExcelAsistencia({ tipo, nombreNegocio: company.name, rangoTexto: rango.texto, filas });
-      }
+      const resumen = tipos.includes("resumen") ? construirResumenPorEmpleado(entradasOk, empleadosOk) : undefined;
+      const filas =
+        tipos.includes("hojas") || tipos.includes("entradas") ? construirFilasDiarias(entradasOk, empleadosOk) : undefined;
+
+      await generarExcelAsistencia({ tipos, nombreNegocio: company.name, rangoTexto: rango.texto, resumen, filas });
     } finally {
       setGenerando(false);
     }
@@ -118,19 +124,19 @@ export function PanelAsistencia({ company, empleados }: { company: Company; empl
   return (
     <div className="mt-5 rounded-2xl border border-border bg-card p-4 shadow-sm">
       <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Tipo de reporte</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">Puedes marcar más de uno — salen todos en el mismo Excel.</p>
       <div className="mt-2 space-y-2">
         {TIPOS.map((t) => (
           <label
             key={t.valor}
             className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-2.5 ${
-              tipo === t.valor ? "border-primary bg-accent" : "border-border"
+              tipos.includes(t.valor) ? "border-primary bg-accent" : "border-border"
             }`}
           >
             <input
-              type="radio"
-              name="tipo-reporte"
-              checked={tipo === t.valor}
-              onChange={() => setTipo(t.valor)}
+              type="checkbox"
+              checked={tipos.includes(t.valor)}
+              onChange={() => alternarTipo(t.valor)}
               className="mt-0.5 h-4 w-4 accent-primary"
             />
             <span>
