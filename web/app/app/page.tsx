@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "motion/react";
 import { Camera, ShieldCheck, ChevronRight, MapPinOff, X, MapPin } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -25,9 +26,15 @@ import { desglosarMarcacion, type Marcacion } from "@/lib/nomina";
 import { hoyISO } from "@/lib/app-storage";
 import { calcularPuntualidad } from "@/lib/puntualidad";
 import { OnboardingChecklist, type PasoGuia } from "@/components/app/dashboard/OnboardingChecklist";
-import { HorasSemanaChart, type DiaHoras } from "@/components/app/dashboard/HorasSemanaChart";
+import { HorasSemanaChart, type BarraHoras } from "@/components/app/dashboard/HorasSemanaChart";
 import { HorasPorProyectoChart, type ProyectoHoras } from "@/components/app/dashboard/HorasPorProyectoChart";
 import { ProximosFestivos } from "@/components/app/dashboard/ProximosFestivos";
+import type { PuntoEnVivo } from "@/components/app/mapa/LiveMap";
+
+const LiveMap = dynamic(() => import("@/components/app/mapa/LiveMap").then((m) => m.LiveMap), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse bg-secondary" />,
+});
 
 function aMarcacion(t: TimeEntry): Marcacion {
   return {
@@ -110,6 +117,7 @@ export default function HoyPage() {
   const [fotoSalidaUrl, setFotoSalidaUrl] = useState<string | null>(null);
   const [cargandoFoto, setCargandoFoto] = useState(false);
   const [ahora, setAhora] = useState(() => Date.now());
+  const [periodoVista, setPeriodoVista] = useState<"dia" | "semana" | "mes">("semana");
 
   useEffect(() => {
     const id = setInterval(() => setAhora(Date.now()), 60_000);
@@ -218,7 +226,31 @@ export default function HoyPage() {
     return acc + desglose.horasTotal * valorHora;
   }, 0);
 
-  const horasPorDia: DiaHoras[] = (() => {
+  const horasChart: BarraHoras[] = (() => {
+    if (periodoVista === "dia") {
+      return empleadosActivos
+        .map((emp) => ({
+          etiqueta: emp.nombre.split(" ")[0],
+          horas: entradas
+            .filter((e) => e.employee_id === emp.id)
+            .reduce((s, e) => s + horasDeMarcacion(e), 0),
+        }))
+        .filter((d) => d.horas > 0);
+    }
+    if (periodoVista === "mes") {
+      const hoyDate = new Date();
+      const finMes = new Date(hoyDate.getFullYear(), hoyDate.getMonth() + 1, 0).getDate();
+      const semanas = Math.ceil(finMes / 7);
+      const porSemana = new Array(semanas).fill(0);
+      entradasCompletas.forEach((e) => {
+        const [y, m, d] = e.fecha.split("-").map(Number);
+        if (y !== hoyDate.getFullYear() || m - 1 !== hoyDate.getMonth()) return;
+        const indice = Math.ceil(d / 7) - 1;
+        porSemana[indice] += horasDeMarcacion(e);
+      });
+      return porSemana.map((horas, i) => ({ etiqueta: `Sem ${i + 1}`, horas }));
+    }
+    // semana (por defecto)
     const lunes = lunesDeSemana(new Date());
     return Array.from({ length: 7 }, (_, i) => {
       const dia = new Date(lunes);
@@ -227,9 +259,20 @@ export default function HoyPage() {
       const horas = entradasSemana
         .filter((e) => e.fecha === fechaISO)
         .reduce((s, e) => s + horasDeMarcacion(e), 0);
-      return { dia: DIAS_SEMANA[i], horas };
+      return { etiqueta: DIAS_SEMANA[i], horas };
     });
   })();
+
+  const puntosEnVivo: PuntoEnVivo[] = trabajandoAhora
+    .filter(({ entry }) => entry.lat != null && entry.lng != null)
+    .map(({ emp, entry }) => ({
+      id: entry.id,
+      nombre: emp.nombre,
+      lat: entry.lat as number,
+      lng: entry.lng as number,
+      tiempoTexto: `Trabajando hace ${tiempoTranscurrido(entry.fecha, entry.hora_entrada.slice(0, 5), ahora)}`,
+      fueraDeRango: entry.fuera_de_rango,
+    }));
 
   const horasPorProyecto: ProyectoHoras[] = sitios
     .map((sitio) => ({
@@ -314,15 +357,52 @@ export default function HoyPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm md:col-span-2">
-          <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-            Horas trabajadas esta semana
-          </h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              Horas trabajadas
+            </h2>
+            <div className="flex gap-0.5 rounded-lg bg-secondary p-0.5">
+              {(["dia", "semana", "mes"] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriodoVista(p)}
+                  className={`rounded-md px-2 py-1 text-[11px] font-semibold capitalize transition-colors ${
+                    periodoVista === p ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="mt-2">
-            <HorasSemanaChart datos={horasPorDia} />
+            {horasChart.every((d) => d.horas === 0) ? (
+              <div className="flex h-36 items-center justify-center text-xs text-muted-foreground">
+                Sin horas registradas en este período.
+              </div>
+            ) : (
+              <HorasSemanaChart datos={horasChart} />
+            )}
           </div>
         </div>
 
         <ProximosFestivos />
+
+        {puntosEnVivo.length > 0 && (
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm md:col-span-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                Ubicaciones en vivo
+              </h2>
+              <Link href="/app/mapa" className="text-xs font-medium text-primary">
+                Ver mapa completo
+              </Link>
+            </div>
+            <div className="mt-3 h-48 overflow-hidden rounded-xl">
+              <LiveMap sitios={sitios} puntos={puntosEnVivo} />
+            </div>
+          </div>
+        )}
 
         {horasPorProyecto.length > 0 && (
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm md:col-span-3">

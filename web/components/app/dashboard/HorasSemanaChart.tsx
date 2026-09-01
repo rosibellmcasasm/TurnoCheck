@@ -2,18 +2,18 @@
 
 import { Bar, BarChart, ResponsiveContainer, XAxis, Tooltip } from "recharts";
 
-export interface DiaHoras {
-  dia: string;
+export interface BarraHoras {
+  etiqueta: string;
   horas: number;
 }
 
-export function HorasSemanaChart({ datos }: { datos: DiaHoras[] }) {
+export function HorasSemanaChart({ datos }: { datos: BarraHoras[] }) {
   return (
     <div className="h-36 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={datos} barCategoryGap={14}>
           <XAxis
-            dataKey="dia"
+            dataKey="etiqueta"
             axisLine={false}
             tickLine={false}
             tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
