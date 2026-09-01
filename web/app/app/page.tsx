@@ -148,6 +148,9 @@ export default function HoyPage() {
   const yaMarcaron = empleadosActivos.filter(
     (e) => estadoDeHoy(e.id, entradas).estado !== "pendiente",
   ).length;
+  const completaronHoy = empleadosActivos.filter(
+    (e) => estadoDeHoy(e.id, entradas).estado === "completo",
+  ).length;
 
   const pasosGuia: PasoGuia[] = [
     { id: "empleado", titulo: "Agrega tu primer empleado", href: "/app/empleados", hecho: empleados.length > 0 },
@@ -203,7 +206,7 @@ export default function HoyPage() {
           </p>
         </div>
 
-        {trabajandoAhora.length > 0 && (
+        {empleadosActivos.length > 0 && (
           <div className="mt-4 rounded-2xl border border-success/30 bg-success-soft p-4 md:mt-0">
             <div className="flex items-center gap-1.5">
               <span className="relative flex h-2 w-2">
@@ -211,19 +214,37 @@ export default function HoyPage() {
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
               </span>
               <h2 className="text-xs font-bold uppercase tracking-wide text-success">
-                Trabajando ahora · {trabajandoAhora.length}
+                Asistencia en vivo
               </h2>
             </div>
-            <div className="mt-2.5 space-y-2">
-              {trabajandoAhora.map(({ emp, entry }) => (
-                <div key={emp.id} className="flex items-center justify-between text-sm">
-                  <span className="min-w-0 truncate font-medium text-foreground">{emp.nombre}</span>
-                  <span className="tabular shrink-0 text-xs text-muted-foreground">
-                    {tiempoTranscurrido(entry.fecha, entry.hora_entrada.slice(0, 5), ahora)}
-                  </span>
-                </div>
-              ))}
+
+            <div className="mt-2.5 grid grid-cols-3 divide-x divide-success/20 text-center">
+              <div>
+                <p className="tabular text-xl font-extrabold text-foreground">{trabajandoAhora.length}</p>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Trabajando</p>
+              </div>
+              <div>
+                <p className="tabular text-xl font-extrabold text-foreground">{completaronHoy}</p>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Completaron</p>
+              </div>
+              <div>
+                <p className="tabular text-xl font-extrabold text-foreground">{empleadosActivos.length}</p>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
+              </div>
             </div>
+
+            {trabajandoAhora.length > 0 && (
+              <div className="mt-3 space-y-2 border-t border-success/20 pt-2.5">
+                {trabajandoAhora.map(({ emp, entry }) => (
+                  <div key={emp.id} className="flex items-center justify-between text-sm">
+                    <span className="min-w-0 truncate font-medium text-foreground">{emp.nombre}</span>
+                    <span className="tabular shrink-0 text-xs text-muted-foreground">
+                      {tiempoTranscurrido(entry.fecha, entry.hora_entrada.slice(0, 5), ahora)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
