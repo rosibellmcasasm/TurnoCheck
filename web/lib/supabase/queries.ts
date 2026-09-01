@@ -61,6 +61,11 @@ export interface WorkSite {
   lat: number;
   lng: number;
   activo: boolean;
+  codigo_proyecto: string | null;
+  cliente: string | null;
+  descripcion: string | null;
+  color: string | null;
+  empleados_asignados: string[];
   created_at: string;
 }
 
@@ -286,17 +291,38 @@ export async function listWorkSites(supabase: SupabaseClient, companyId: string)
   return data as WorkSite[];
 }
 
+export interface WorkSiteInput {
+  nombre: string;
+  lat: number;
+  lng: number;
+  codigo_proyecto?: string | null;
+  cliente?: string | null;
+  descripcion?: string | null;
+  color?: string | null;
+  empleados_asignados?: string[];
+}
+
 export async function createWorkSite(
   supabase: SupabaseClient,
   userId: string,
   companyId: string,
-  input: { nombre: string; lat: number; lng: number },
+  input: WorkSiteInput,
 ) {
   const { data, error } = await supabase
     .from("work_sites")
     .insert({ owner_id: userId, company_id: companyId, ...input })
     .select()
     .single();
+  if (error) throw error;
+  return data as WorkSite;
+}
+
+export async function updateWorkSite(
+  supabase: SupabaseClient,
+  siteId: string,
+  input: Partial<WorkSiteInput>,
+) {
+  const { data, error } = await supabase.from("work_sites").update(input).eq("id", siteId).select().single();
   if (error) throw error;
   return data as WorkSite;
 }
