@@ -101,7 +101,7 @@ function descargarExcelSemana(
   URL.revokeObjectURL(url);
 }
 
-function aMarcacion(t: TimeEntry): Marcacion {
+function aMarcacion(t: TimeEntry, empleado?: Employee): Marcacion {
   return {
     id: t.id,
     empleadoId: t.employee_id,
@@ -109,6 +109,8 @@ function aMarcacion(t: TimeEntry): Marcacion {
     horaEntrada: t.hora_entrada.slice(0, 5),
     horaSalida: t.hora_salida ? t.hora_salida.slice(0, 5) : null,
     esFestivo: t.es_festivo,
+    descansoInicio: empleado?.descanso_inicio,
+    descansoFin: empleado?.descanso_fin,
   };
 }
 
@@ -193,9 +195,10 @@ export default function ReportesPage() {
           hoy.toISOString().slice(0, 10),
         ),
       ]);
+      const empleadosPorId = new Map(emps.map((e) => [e.id, e]));
       setCompany(empresa);
       setEmpleados(emps);
-      setMarcaciones(entradas.map(aMarcacion));
+      setMarcaciones(entradas.map((t) => aMarcacion(t, empleadosPorId.get(t.employee_id))));
       setCargando(false);
     })();
   }, []);

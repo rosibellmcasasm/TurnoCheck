@@ -18,8 +18,9 @@ import {
 import { desglosarMarcacion, type Marcacion } from "@/lib/nomina";
 import { hoyISO } from "@/lib/app-storage";
 import { calcularPuntualidad } from "@/lib/puntualidad";
+import { horarioDelDia } from "@/lib/horario-semanal";
 
-function aMarcacion(t: TimeEntry): Marcacion {
+function aMarcacion(t: TimeEntry, empleado?: Employee): Marcacion {
   return {
     id: t.id,
     empleadoId: t.employee_id,
@@ -27,6 +28,8 @@ function aMarcacion(t: TimeEntry): Marcacion {
     horaEntrada: t.hora_entrada.slice(0, 5),
     horaSalida: t.hora_salida ? t.hora_salida.slice(0, 5) : null,
     esFestivo: t.es_festivo,
+    descansoInicio: empleado?.descanso_inicio,
+    descansoFin: empleado?.descanso_fin,
   };
 }
 
@@ -122,7 +125,7 @@ export default function HoyPage() {
 
   const nominaHoy = entradas.reduce((acc, m) => {
     const empleado = empleados.find((e) => e.id === m.employee_id);
-    const desglose = desglosarMarcacion(aMarcacion(m));
+    const desglose = desglosarMarcacion(aMarcacion(m, empleado));
     if (!empleado || !desglose) return acc;
     const valorHora = empleado.salario_mensual / 210;
     return acc + desglose.horasTotal * valorHora;
@@ -184,9 +187,12 @@ export default function HoyPage() {
         >
           {empleadosActivos.map((emp) => {
             const { estado, hora, horaSalida, fueraDeRango, entry } = estadoDeHoy(emp.id, entradas);
-            const puntualidad = hora ? calcularPuntualidad(emp.hora_entrada_esperada, hora) : null;
+            const horarioHoy = horarioDelDia(emp.horario_semanal, hoyISO());
+            const horaEntradaEsperada = horarioHoy?.entrada ?? emp.hora_entrada_esperada;
+            const horaSalidaEsperada = horarioHoy?.salida ?? emp.hora_salida_esperada;
+            const puntualidad = hora ? calcularPuntualidad(horaEntradaEsperada, hora) : null;
             const puntualidadSalida = horaSalida
-              ? calcularPuntualidad(emp.hora_salida_esperada, horaSalida)
+              ? calcularPuntualidad(horaSalidaEsperada, horaSalida)
               : null;
             return (
               <motion.div

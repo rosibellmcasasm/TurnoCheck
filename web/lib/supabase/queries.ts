@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { readOnboarding, ONBOARDING_KEY, planRecomendado } from "@/lib/onboarding-storage";
+import type { HorarioSemanal } from "@/lib/horario-semanal";
 
 export type PeriodoPago = "semanal" | "quincenal" | "mensual";
+export type Disponibilidad = "fijo" | "flexible";
 
 export interface Company {
   id: string;
@@ -24,6 +26,12 @@ export interface Employee {
   salario_mensual: number;
   hora_entrada_esperada: string | null;
   hora_salida_esperada: string | null;
+  email: string | null;
+  telefono: string | null;
+  disponibilidad: Disponibilidad;
+  horario_semanal: HorarioSemanal | null;
+  descanso_inicio: string | null;
+  descanso_fin: string | null;
   activo: boolean;
   created_at: string;
 }
@@ -138,6 +146,12 @@ export async function createEmployee(
     salario_mensual: number;
     hora_entrada_esperada?: string | null;
     hora_salida_esperada?: string | null;
+    email?: string | null;
+    telefono?: string | null;
+    disponibilidad?: Disponibilidad;
+    horario_semanal?: HorarioSemanal | null;
+    descanso_inicio?: string | null;
+    descanso_fin?: string | null;
   },
 ) {
   const { data, error } = await supabase
@@ -145,6 +159,28 @@ export async function createEmployee(
     .insert({ owner_id: userId, company_id: companyId, ...input })
     .select()
     .single();
+  if (error) throw error;
+  return data as Employee;
+}
+
+export async function updateEmployee(
+  supabase: SupabaseClient,
+  employeeId: string,
+  input: {
+    nombre: string;
+    cargo: string;
+    salario_mensual: number;
+    hora_entrada_esperada?: string | null;
+    hora_salida_esperada?: string | null;
+    email?: string | null;
+    telefono?: string | null;
+    disponibilidad?: Disponibilidad;
+    horario_semanal?: HorarioSemanal | null;
+    descanso_inicio?: string | null;
+    descanso_fin?: string | null;
+  },
+) {
+  const { data, error } = await supabase.from("employees").update(input).eq("id", employeeId).select().single();
   if (error) throw error;
   return data as Employee;
 }

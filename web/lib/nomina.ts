@@ -39,6 +39,10 @@ export interface Marcacion {
   fotoUrl?: string;
   lat?: number;
   lng?: number;
+  // Descanso (ej. hora de almuerzo) del empleado — se resta de las horas
+  // pagadas. Mismo horario de descanso para todos los días trabajados.
+  descansoInicio?: string | null;
+  descansoFin?: string | null;
 }
 
 function horaAMinutos(hora: string): number {
@@ -51,20 +55,32 @@ function esDomingo(fecha: string): boolean {
   return new Date(y, m - 1, d).getDay() === 0;
 }
 
-/** Divide un turno en minutos diurnos y nocturnos, manejando turnos que cruzan la medianoche. */
-function dividirDiurnoNocturno(horaEntrada: string, horaSalida: string) {
+/** Divide un turno en minutos diurnos y nocturnos, manejando turnos que cruzan la medianoche.
+ *  Los minutos que caen dentro del descanso (si se define) no se cuentan como ninguno de los
+ *  dos — quedan fuera del total, igual que exige la ley para el almuerzo no remunerado. */
+function dividirDiurnoNocturno(
+  horaEntrada: string,
+  horaSalida: string,
+  descansoInicio?: string | null,
+  descansoFin?: string | null,
+) {
   const inicio = horaAMinutos(horaEntrada);
   let fin = horaAMinutos(horaSalida);
   if (fin < inicio) fin += 24 * 60; // cruzó la medianoche (fin === inicio = turno de 0 minutos, no 24h)
 
   const inicioDiurno = HORA_INICIO_DIURNA * 60;
   const inicioNocturno = HORA_INICIO_NOCTURNA * 60;
+  const inicioDescanso = descansoInicio ? horaAMinutos(descansoInicio) : null;
+  const finDescanso = descansoFin ? horaAMinutos(descansoFin) : null;
 
   let minutosDiurnos = 0;
   let minutosNocturnos = 0;
 
   for (let t = inicio; t < fin; t++) {
     const horaDelDia = t % (24 * 60);
+    if (inicioDescanso !== null && finDescanso !== null && horaDelDia >= inicioDescanso && horaDelDia < finDescanso) {
+      continue; // descanso no remunerado — no cuenta como trabajado
+    }
     const esDiurno = horaDelDia >= inicioDiurno && horaDelDia < inicioNocturno;
     if (esDiurno) minutosDiurnos++;
     else minutosNocturnos++;
@@ -83,7 +99,12 @@ export interface DesgloseMarcacion {
 
 export function desglosarMarcacion(m: Marcacion): DesgloseMarcacion | null {
   if (!m.horaSalida) return null;
-  const { horasDiurnas, horasNocturnas } = dividirDiurnoNocturno(m.horaEntrada, m.horaSalida);
+  const { horasDiurnas, horasNocturnas } = dividirDiurnoNocturno(
+    m.horaEntrada,
+    m.horaSalida,
+    m.descansoInicio,
+    m.descansoFin,
+  );
   return {
     marcacionId: m.id,
     horasDiurnas,

@@ -13,7 +13,11 @@ import {
   puedeAgregarEmpleado,
   type Company,
   type Employee,
+  type Disponibilidad,
 } from "@/lib/supabase/queries";
+import { DIAS_SEMANA, type DiaSemana, type HorarioDia, type HorarioSemanal } from "@/lib/horario-semanal";
+
+const HORARIO_VACIO: HorarioDia = { activo: false, entrada: null, salida: null };
 
 export default function EmpleadosPage() {
   const router = useRouter();
@@ -22,11 +26,35 @@ export default function EmpleadosPage() {
   const [empleados, setEmpleados] = useState<Employee[]>([]);
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState(false);
+
   const [nombre, setNombre] = useState("");
   const [cargo, setCargo] = useState("");
   const [salario, setSalario] = useState("");
-  const [horaEntrada, setHoraEntrada] = useState("");
-  const [horaSalida, setHoraSalida] = useState("");
+  const [email, setEmail] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [disponibilidad, setDisponibilidad] = useState<Disponibilidad>("fijo");
+  const [horarioSemanal, setHorarioSemanal] = useState<HorarioSemanal>({});
+  const [descansoInicio, setDescansoInicio] = useState("");
+  const [descansoFin, setDescansoFin] = useState("");
+
+  function limpiarFormulario() {
+    setNombre("");
+    setCargo("");
+    setSalario("");
+    setEmail("");
+    setTelefono("");
+    setDisponibilidad("fijo");
+    setHorarioSemanal({});
+    setDescansoInicio("");
+    setDescansoFin("");
+  }
+
+  function actualizarDia(dia: DiaSemana, cambios: Partial<HorarioDia>) {
+    setHorarioSemanal((prev) => ({
+      ...prev,
+      [dia]: { ...HORARIO_VACIO, ...prev[dia], ...cambios },
+    }));
+  }
 
   async function cargar() {
     const supabase = createClient();
@@ -43,19 +71,7 @@ export default function EmpleadosPage() {
   }
 
   useEffect(() => {
-    (async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      const empresa = await ensureCompany(supabase, user.id);
-      const emps = await listEmployees(supabase, empresa.id);
-      setUserId(user.id);
-      setCompany(empresa);
-      setEmpleados(emps);
-      setCargando(false);
-    })();
+    cargar();
   }, []);
 
   const activos = empleados.filter((e) => e.activo).length;
@@ -64,18 +80,21 @@ export default function EmpleadosPage() {
   async function guardar() {
     if (!company || !userId || nombre.trim().length < 2) return;
     const supabase = createClient();
+
+    const algunDiaActivo = Object.values(horarioSemanal).some((d) => d?.activo);
+
     await createEmployee(supabase, userId, company.id, {
       nombre: nombre.trim(),
       cargo: cargo.trim() || "Sin cargo",
       salario_mensual: Number(salario) || 1_423_500,
-      hora_entrada_esperada: horaEntrada || null,
-      hora_salida_esperada: horaSalida || null,
+      email: email.trim() || null,
+      telefono: telefono.trim() || null,
+      disponibilidad,
+      horario_semanal: algunDiaActivo ? horarioSemanal : null,
+      descanso_inicio: descansoInicio || null,
+      descanso_fin: descansoFin || null,
     });
-    setNombre("");
-    setCargo("");
-    setSalario("");
-    setHoraEntrada("");
-    setHoraSalida("");
+    limpiarFormulario();
     setAbierto(false);
     await cargar();
   }
@@ -142,10 +161,18 @@ export default function EmpleadosPage() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-foreground">{emp.nombre}</p>
                 <p className="text-xs text-muted-foreground">
-                  {emp.cargo} · ${emp.salario_mensual.toLocaleString("es-CO")}/mes
-                  {emp.hora_entrada_esperada && ` · Entra ${emp.hora_entrada_esperada.slice(0, 5)}`}
-                  {emp.hora_salida_esperada && ` · Sale ${emp.hora_salida_esperada.slice(0, 5)}`}
+                  {emp.cargo} · ${emp.salario_mensual.toLocaleString("es-CO")}/mes ·{" "}
+                  {emp.disponibilidad === "flexible" ? "Flexible" : "Fijo"}
+                  {emp.telefono && ` · ${emp.telefono}`}
                 </p>
+                {(emp.descanso_inicio || emp.horario_semanal) && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {emp.horario_semanal && "Horario por día definido"}
+                    {emp.descanso_inicio &&
+                      emp.descanso_fin &&
+                      `${emp.horario_semanal ? " · " : ""}Descanso ${emp.descanso_inicio.slice(0, 5)}-${emp.descanso_fin.slice(0, 5)}`}
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => eliminar(emp.id)}
@@ -169,80 +196,164 @@ export default function EmpleadosPage() {
             transition={{ duration: 0.2 }}
           >
             <motion.div
-              className="w-full max-w-sm rounded-t-2xl bg-card p-5 shadow-xl sm:rounded-2xl"
+              className="max-h-[88vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-card p-5 shadow-xl sm:rounded-2xl"
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 24 }}
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             >
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-base font-bold text-foreground">Nuevo empleado</h2>
-              <button onClick={() => setAbierto(false)} aria-label="Cerrar">
-                <X className="h-5 w-5 text-muted-foreground" />
-              </button>
-            </div>
+              <div className="flex items-center justify-between">
+                <h2 className="font-display text-base font-bold text-foreground">Nuevo empleado</h2>
+                <button onClick={() => setAbierto(false)} aria-label="Cerrar">
+                  <X className="h-5 w-5 text-muted-foreground" />
+                </button>
+              </div>
 
-            <label className="mt-4 block text-sm font-medium text-foreground">
-              Nombre
-              <input
-                autoFocus
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                placeholder="Ej: Laura Pérez"
-                className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
-              />
-            </label>
-            <label className="mt-3 block text-sm font-medium text-foreground">
-              Cargo
-              <input
-                value={cargo}
-                onChange={(e) => setCargo(e.target.value)}
-                placeholder="Ej: Caja"
-                className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
-              />
-            </label>
-            <label className="mt-3 block text-sm font-medium text-foreground">
-              Salario mensual (COP)
-              <input
-                inputMode="numeric"
-                value={salario}
-                onChange={(e) => setSalario(e.target.value.replace(/\D/g, ""))}
-                placeholder="1.423.500"
-                className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
-              />
-            </label>
-            <label className="mt-3 block text-sm font-medium text-foreground">
-              Hora de entrada esperada (opcional)
-              <input
-                type="time"
-                value={horaEntrada}
-                onChange={(e) => setHoraEntrada(e.target.value)}
-                className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
-              />
-              <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                Si la dejas vacía, no calificamos si llegó a tiempo (útil para horarios que
-                cambian, como obra por proyectos).
-              </span>
-            </label>
-            <label className="mt-3 block text-sm font-medium text-foreground">
-              Hora de salida esperada (opcional)
-              <input
-                type="time"
-                value={horaSalida}
-                onChange={(e) => setHoraSalida(e.target.value)}
-                className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
-              />
-            </label>
+              <label className="mt-4 block text-sm font-medium text-foreground">
+                Nombre y apellido
+                <input
+                  autoFocus
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  placeholder="Ej: Laura Pérez"
+                  className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
+                />
+              </label>
+              <label className="mt-3 block text-sm font-medium text-foreground">
+                Rol
+                <input
+                  value={cargo}
+                  onChange={(e) => setCargo(e.target.value)}
+                  placeholder="Ej: Cajera, Maestro de obra"
+                  className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
+                />
+              </label>
 
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              transition={{ duration: 0.12 }}
-              onClick={guardar}
-              disabled={nombre.trim().length < 2}
-              className="mt-5 flex h-12 w-full items-center justify-center rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-40"
-            >
-              Guardar empleado
-            </motion.button>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label className="block text-sm font-medium text-foreground">
+                  Correo (opcional)
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="correo@ej.com"
+                    className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3 text-[13px] text-foreground outline-none focus:border-primary"
+                  />
+                </label>
+                <label className="block text-sm font-medium text-foreground">
+                  Teléfono (opcional)
+                  <input
+                    type="tel"
+                    value={telefono}
+                    onChange={(e) => setTelefono(e.target.value)}
+                    placeholder="300 123 4567"
+                    className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3 text-[13px] text-foreground outline-none focus:border-primary"
+                  />
+                </label>
+              </div>
+
+              <label className="mt-3 block text-sm font-medium text-foreground">
+                Salario mensual (COP)
+                <input
+                  inputMode="numeric"
+                  value={salario}
+                  onChange={(e) => setSalario(e.target.value.replace(/\D/g, ""))}
+                  placeholder="1.423.500"
+                  className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3.5 text-[15px] text-foreground outline-none focus:border-primary"
+                />
+              </label>
+
+              <div className="mt-4 border-t border-border pt-3.5">
+                <p className="text-sm font-medium text-foreground">Disponibilidad</p>
+                <div className="mt-1.5 flex gap-2">
+                  {(["fijo", "flexible"] as const).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setDisponibilidad(d)}
+                      className={`h-9 flex-1 rounded-lg text-xs font-semibold capitalize ${
+                        disponibilidad === d
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary text-muted-foreground"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 border-t border-border pt-3.5">
+                <p className="text-sm font-medium text-foreground">Horario por día (opcional)</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Marca los días que trabaja y su hora de entrada/salida ese día. Si lo dejas
+                  vacío, no calificamos si llegó a tiempo.
+                </p>
+                <div className="mt-2.5 space-y-2">
+                  {DIAS_SEMANA.map(({ valor, etiqueta }) => {
+                    const dia = horarioSemanal[valor] ?? HORARIO_VACIO;
+                    return (
+                      <div key={valor} className="rounded-lg border border-border p-2.5">
+                        <label className="flex items-center gap-2 text-sm text-foreground">
+                          <input
+                            type="checkbox"
+                            checked={dia.activo}
+                            onChange={(e) => actualizarDia(valor, { activo: e.target.checked })}
+                            className="h-4 w-4 accent-primary"
+                          />
+                          {etiqueta}
+                        </label>
+                        {dia.activo && (
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <input
+                              type="time"
+                              value={dia.entrada ?? ""}
+                              onChange={(e) => actualizarDia(valor, { entrada: e.target.value || null })}
+                              className="h-10 w-full rounded-lg border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:border-primary"
+                            />
+                            <input
+                              type="time"
+                              value={dia.salida ?? ""}
+                              onChange={(e) => actualizarDia(valor, { salida: e.target.value || null })}
+                              className="h-10 w-full rounded-lg border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:border-primary"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-4 border-t border-border pt-3.5">
+                <p className="text-sm font-medium text-foreground">Descanso (hora de comer, opcional)</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Ese tiempo se resta de las horas pagadas en Reportes.
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <input
+                    type="time"
+                    value={descansoInicio}
+                    onChange={(e) => setDescansoInicio(e.target.value)}
+                    className="h-10 w-full rounded-lg border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:border-primary"
+                  />
+                  <input
+                    type="time"
+                    value={descansoFin}
+                    onChange={(e) => setDescansoFin(e.target.value)}
+                    className="h-10 w-full rounded-lg border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                transition={{ duration: 0.12 }}
+                onClick={guardar}
+                disabled={nombre.trim().length < 2}
+                className="mt-5 flex h-12 w-full items-center justify-center rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-40"
+              >
+                Guardar empleado
+              </motion.button>
             </motion.div>
           </motion.div>
         )}
