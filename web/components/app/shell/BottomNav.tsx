@@ -20,7 +20,7 @@ export function BottomNav() {
     <nav className="fixed inset-x-0 bottom-6 z-20 flex justify-center px-4 md:hidden">
       <div className="flex items-center gap-1 rounded-full bg-foreground p-1.5 shadow-lg shadow-foreground/25">
         {ITEMS.map((item) => {
-          const active = pathname === item.href;
+          const active = item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}

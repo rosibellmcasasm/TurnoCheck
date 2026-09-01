@@ -33,7 +33,7 @@ export function Sidebar() {
 
       <nav className="mt-6 flex flex-1 flex-col gap-1 px-3">
         {ITEMS.map((item) => {
-          const active = pathname === item.href;
+          const active = item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
