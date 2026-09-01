@@ -10,15 +10,19 @@ import {
   ensureCompany,
   listEmployees,
   listTimeEntriesForDate,
+  listWorkSites,
+  hasAnyMarcacion,
   getFotoMarcacionUrl,
   cerrarTurnosVencidos,
   type Company,
   type Employee,
   type TimeEntry,
+  type WorkSite,
 } from "@/lib/supabase/queries";
 import { desglosarMarcacion, type Marcacion } from "@/lib/nomina";
 import { hoyISO } from "@/lib/app-storage";
 import { calcularPuntualidad } from "@/lib/puntualidad";
+import { OnboardingChecklist, type PasoGuia } from "@/components/app/dashboard/OnboardingChecklist";
 
 function aMarcacion(t: TimeEntry): Marcacion {
   return {
@@ -72,6 +76,8 @@ export default function HoyPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [empleados, setEmpleados] = useState<Employee[]>([]);
   const [entradas, setEntradas] = useState<TimeEntry[]>([]);
+  const [sitios, setSitios] = useState<WorkSite[]>([]);
+  const [huboMarcacionAlgunaVez, setHuboMarcacionAlgunaVez] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [verMarcacion, setVerMarcacion] = useState<{ emp: Employee; entry: TimeEntry } | null>(null);
   const [fotoEntradaUrl, setFotoEntradaUrl] = useState<string | null>(null);
@@ -112,13 +118,17 @@ export default function HoyPage() {
       if (!user) return;
       const empresa = await ensureCompany(supabase, user.id);
       await cerrarTurnosVencidos(supabase, empresa);
-      const [emps, hoy] = await Promise.all([
+      const [emps, hoy, sitiosData, marcoAlgunaVez] = await Promise.all([
         listEmployees(supabase, empresa.id),
         listTimeEntriesForDate(supabase, empresa.id, hoyISO()),
+        listWorkSites(supabase, empresa.id),
+        hasAnyMarcacion(supabase, empresa.id),
       ]);
       setCompany(empresa);
       setEmpleados(emps);
       setEntradas(hoy);
+      setSitios(sitiosData);
+      setHuboMarcacionAlgunaVez(marcoAlgunaVez);
       setCargando(false);
     })();
   }, []);
@@ -138,6 +148,18 @@ export default function HoyPage() {
   const yaMarcaron = empleadosActivos.filter(
     (e) => estadoDeHoy(e.id, entradas).estado !== "pendiente",
   ).length;
+
+  const pasosGuia: PasoGuia[] = [
+    { id: "empleado", titulo: "Agrega tu primer empleado", href: "/app/empleados", hecho: empleados.length > 0 },
+    { id: "sitio", titulo: "Configura un sitio de trabajo", href: "/app/ajustes", hecho: sitios.length > 0 },
+    {
+      id: "horario",
+      titulo: "Define un horario esperado",
+      href: "/app/empleados",
+      hecho: empleados.some((e) => e.hora_entrada_esperada),
+    },
+    { id: "marcacion", titulo: "Haz tu primera marcación", href: "/app/empleados", hecho: huboMarcacionAlgunaVez },
+  ];
 
   const trabajandoAhora = empleadosActivos
     .map((emp) => {
@@ -168,41 +190,45 @@ export default function HoyPage() {
         Hola, {company.name}
       </h1>
 
-      <div className="mt-4 rounded-2xl bg-primary p-5 text-primary-foreground shadow-md shadow-primary/20">
-        <p className="text-[11px] uppercase tracking-wide opacity-80">
-          Nómina de hoy en vivo
-        </p>
-        <p className="tabular mt-1 text-3xl font-extrabold">
-          $<AnimatedNumber value={nominaHoy} />
-        </p>
-        <p className="mt-1 text-xs opacity-85">
-          {yaMarcaron} de {empleadosActivos.length} empleados ya marcaron
-        </p>
+      <div className="mt-4 md:grid md:grid-cols-2 md:items-start md:gap-4">
+        <div className="rounded-2xl bg-primary p-5 text-primary-foreground shadow-md shadow-primary/20">
+          <p className="text-[11px] uppercase tracking-wide opacity-80">
+            Nómina de hoy en vivo
+          </p>
+          <p className="tabular mt-1 text-3xl font-extrabold">
+            $<AnimatedNumber value={nominaHoy} />
+          </p>
+          <p className="mt-1 text-xs opacity-85">
+            {yaMarcaron} de {empleadosActivos.length} empleados ya marcaron
+          </p>
+        </div>
+
+        {trabajandoAhora.length > 0 && (
+          <div className="mt-4 rounded-2xl border border-success/30 bg-success-soft p-4 md:mt-0">
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+              </span>
+              <h2 className="text-xs font-bold uppercase tracking-wide text-success">
+                Trabajando ahora · {trabajandoAhora.length}
+              </h2>
+            </div>
+            <div className="mt-2.5 space-y-2">
+              {trabajandoAhora.map(({ emp, entry }) => (
+                <div key={emp.id} className="flex items-center justify-between text-sm">
+                  <span className="min-w-0 truncate font-medium text-foreground">{emp.nombre}</span>
+                  <span className="tabular shrink-0 text-xs text-muted-foreground">
+                    {tiempoTranscurrido(entry.fecha, entry.hora_entrada.slice(0, 5), ahora)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {trabajandoAhora.length > 0 && (
-        <div className="mt-4 rounded-2xl border border-success/30 bg-success-soft p-4">
-          <div className="flex items-center gap-1.5">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-            </span>
-            <h2 className="text-xs font-bold uppercase tracking-wide text-success">
-              Trabajando ahora · {trabajandoAhora.length}
-            </h2>
-          </div>
-          <div className="mt-2.5 space-y-2">
-            {trabajandoAhora.map(({ emp, entry }) => (
-              <div key={emp.id} className="flex items-center justify-between text-sm">
-                <span className="min-w-0 truncate font-medium text-foreground">{emp.nombre}</span>
-                <span className="tabular shrink-0 text-xs text-muted-foreground">
-                  {tiempoTranscurrido(entry.fecha, entry.hora_entrada.slice(0, 5), ahora)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <OnboardingChecklist pasos={pasosGuia} />
 
       <div className="mt-6 flex items-center justify-between">
         <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">

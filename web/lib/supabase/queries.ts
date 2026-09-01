@@ -156,6 +156,18 @@ export async function deleteEmployee(supabase: SupabaseClient, employeeId: strin
   if (error) throw error;
 }
 
+/** true si la empresa ya tiene AL MENOS una marcación registrada alguna vez
+ *  (no solo hoy) — para la guía de inicio. */
+export async function hasAnyMarcacion(supabase: SupabaseClient, companyId: string) {
+  const { data, error } = await supabase
+    .from("time_entries")
+    .select("id")
+    .eq("company_id", companyId)
+    .limit(1);
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
+}
+
 export async function listTimeEntriesForDate(supabase: SupabaseClient, companyId: string, fecha: string) {
   const { data, error } = await supabase
     .from("time_entries")
