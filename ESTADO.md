@@ -1,6 +1,22 @@
 # ESTADO — TurnoCheck
 Última actualización: 2026-09-01 | Sesión actual: 1
 
+## Localizaciones con mapa interactivo (2026-09-01)
+- ✅ "Añadir nueva localización" (`/app/ajustes/localizaciones/nuevo`) rehecho como flujo con
+  mapa: buscar dirección (Nominatim/OpenStreetMap gratis, proxy propio en `/api/geocode` para
+  fijar el User-Agent que exige su política de uso), arrastrar el pin o tocar el mapa, control
+  deslizante de radio (30-1000m). Antes había que pararse físicamente en el sitio y tocar
+  "Guardar aquí" — eso sigue disponible como atajo ("Usar mi ubicación actual").
+- ✅ El radio de geovalla ahora es POR SITIO (`work_sites.radio_metros`, migración 0015) — antes
+  era una constante global de 150m para todos los sitios de todas las empresas.
+- Ajustes quedó reorganizado en menú con submenús: Organización, Personas (→ Empleados),
+  Localizaciones — cada uno con su propia pantalla.
+- PENDIENTE: la usuaria pidió agregar campos tipo "Formato de hora/País/Divisa" a Organización
+  inspirados en Jibble — se le explicó que la mayoría no aplican (TurnoCheck es Colombia-only
+  por diseño: ley de nómina, festivos, COP, español ya fijos) y se le preguntó cuál sí quiere de
+  verdad (formato 12h/24h parece el único con valor real) — sin respuesta aún.
+
+
 ## Dashboard completo en Hoy: gráfico semanal, festivos, horas por proyecto (2026-09-01)
 - ✅ Gráfico de horas trabajadas por día (L-D, semana actual) con Recharts — datos reales de
   `time_entries`. Se instaló `recharts` (revisado con `npm audit`, sin vulnerabilidades nuevas).
