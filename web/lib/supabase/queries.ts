@@ -12,7 +12,6 @@ export interface Company {
   plan: "micro" | "pyme";
   plan_empleados_limite: number;
   periodo_pago: PeriodoPago;
-  hora_cierre_automatico: string | null;
   created_at: string;
 }
 
@@ -43,8 +42,6 @@ export interface TimeEntry {
   lat: number | null;
   lng: number | null;
   fuera_de_rango: boolean;
-  cierre_automatico: boolean;
-  work_site_id: string | null;
   created_at: string;
 }
 
@@ -56,9 +53,6 @@ export interface WorkSite {
   lat: number;
   lng: number;
   activo: boolean;
-  cliente_final: string | null;
-  avance_porcentaje: number;
-  radio_metros: number;
   created_at: string;
 }
 
@@ -160,18 +154,6 @@ export async function deleteEmployee(supabase: SupabaseClient, employeeId: strin
   if (error) throw error;
 }
 
-/** true si la empresa ya tiene AL MENOS una marcación registrada alguna vez
- *  (no solo hoy) — para la guía de inicio. */
-export async function hasAnyMarcacion(supabase: SupabaseClient, companyId: string) {
-  const { data, error } = await supabase
-    .from("time_entries")
-    .select("id")
-    .eq("company_id", companyId)
-    .limit(1);
-  if (error) throw error;
-  return (data?.length ?? 0) > 0;
-}
-
 export async function listTimeEntriesForDate(supabase: SupabaseClient, companyId: string, fecha: string) {
   const { data, error } = await supabase
     .from("time_entries")
@@ -199,69 +181,6 @@ export async function listTimeEntriesInRange(
   return data as TimeEntry[];
 }
 
-/** Turnos abiertos ahora mismo (sin hora de salida), de cualquier fecha — para el
- *  panel "quién está trabajando ahora" y el mapa en vivo. */
-export async function listMarcacionesAbiertas(supabase: SupabaseClient, companyId: string) {
-  const { data, error } = await supabase
-    .from("time_entries")
-    .select("*")
-    .eq("company_id", companyId)
-    .is("hora_salida", null);
-  if (error) throw error;
-  return data as TimeEntry[];
-}
-
-export async function updateCompanyHoraCierre(
-  supabase: SupabaseClient,
-  companyId: string,
-  horaCierre: string | null,
-) {
-  const { error } = await supabase
-    .from("companies")
-    .update({ hora_cierre_automatico: horaCierre })
-    .eq("id", companyId);
-  if (error) throw error;
-}
-
-/** Cierra solos los turnos que quedaron abiertos de DÍAS ANTERIORES (nunca el de
- *  hoy, que puede seguir en curso de verdad) usando la hora de cierre configurada.
- *  Es una limpieza de "primera versión": corre cuando alguien abre la app, no un
- *  cron en segundo plano — así que el cierre aparece un poco después de esa hora,
- *  no exactamente a esa hora. */
-export async function cerrarTurnosVencidos(supabase: SupabaseClient, company: Company) {
-  if (!company.hora_cierre_automatico) return;
-  const hoy = new Date().toISOString().slice(0, 10);
-  const { data: abiertos, error } = await supabase
-    .from("time_entries")
-    .select("id, fecha")
-    .eq("company_id", company.id)
-    .is("hora_salida", null)
-    .lt("fecha", hoy);
-  if (error) throw error;
-  if (!abiertos || abiertos.length === 0) return;
-
-  await Promise.all(
-    abiertos.map((t) =>
-      supabase
-        .from("time_entries")
-        .update({ hora_salida: company.hora_cierre_automatico, cierre_automatico: true })
-        .eq("id", t.id),
-    ),
-  );
-}
-
-/** Todas las marcaciones completas de la empresa, sin límite de fecha — para
- *  sumar horas invertidas por proyecto desde que arrancó cada obra. */
-export async function listTimeEntriesCompletas(supabase: SupabaseClient, companyId: string) {
-  const { data, error } = await supabase
-    .from("time_entries")
-    .select("*")
-    .eq("company_id", companyId)
-    .not("hora_salida", "is", null);
-  if (error) throw error;
-  return data as TimeEntry[];
-}
-
 export async function crearMarcacionEntrada(
   supabase: SupabaseClient,
   userId: string,
@@ -275,7 +194,6 @@ export async function crearMarcacionEntrada(
     lat?: number;
     lng?: number;
     fuera_de_rango?: boolean;
-    work_site_id?: string | null;
   },
 ) {
   const { data, error } = await supabase
@@ -336,7 +254,7 @@ export async function createWorkSite(
   supabase: SupabaseClient,
   userId: string,
   companyId: string,
-  input: { nombre: string; lat: number; lng: number; radio_metros?: number },
+  input: { nombre: string; lat: number; lng: number },
 ) {
   const { data, error } = await supabase
     .from("work_sites")
@@ -349,17 +267,6 @@ export async function createWorkSite(
 
 export async function toggleWorkSiteActivo(supabase: SupabaseClient, siteId: string, activo: boolean) {
   const { error } = await supabase.from("work_sites").update({ activo }).eq("id", siteId);
-  if (error) throw error;
-}
-
-/** Datos del proyecto que se le muestra al cliente final (para cobrar) —
- *  separado de los datos de la geocerca (nombre/ubicación). */
-export async function updateWorkSiteProyecto(
-  supabase: SupabaseClient,
-  siteId: string,
-  input: { cliente_final: string | null; avance_porcentaje: number },
-) {
-  const { error } = await supabase.from("work_sites").update(input).eq("id", siteId);
   if (error) throw error;
 }
 

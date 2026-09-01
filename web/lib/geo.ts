@@ -9,11 +9,9 @@ export function distanciaMetros(a: { lat: number; lng: number }, b: { lat: numbe
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-/** Radio de geovalla por defecto cuando se crea un sitio nuevo — cada sitio
- *  puede tener el suyo propio (columna `radio_metros`, 30-1000m). Más allá
- *  del radio, la marcación queda señalada como "lejos de toda obra
- *  registrada" (no se bloquea, solo se avisa: el GPS de un celular puede
- *  fallar por 20-80m fácilmente). */
+/** Radio de tolerancia de la geocerca — más allá de esto, la marcación queda
+ *  señalada como "lejos de toda obra registrada" (no se bloquea, solo se
+ *  avisa: el GPS de un celular puede fallar por 20-80m fácilmente). */
 export const RADIO_GEOCERCA_METROS = 150;
 
 /** true si el punto está dentro del radio de AL MENOS un sitio activo.
@@ -21,25 +19,8 @@ export const RADIO_GEOCERCA_METROS = 150;
  *  negocios que todavía no configuraron ninguna obra). */
 export function dentroDeAlgunSitio(
   punto: { lat: number; lng: number },
-  sitios: { lat: number; lng: number; radio_metros?: number }[],
+  sitios: { lat: number; lng: number }[],
 ): boolean {
   if (sitios.length === 0) return true;
-  return sitios.some((s) => distanciaMetros(punto, s) <= (s.radio_metros ?? RADIO_GEOCERCA_METROS));
-}
-
-/** A qué sitio/proyecto pertenece una marcación — el sitio activo más cercano
- *  dentro de SU radio de geovalla. null si no hay ninguno dentro de rango
- *  (o no hay sitios configurados) — para atribuir horas por proyecto. */
-export function sitioDentroDeRango(
-  punto: { lat: number; lng: number },
-  sitios: { id: string; lat: number; lng: number; radio_metros?: number }[],
-): string | null {
-  let mejor: { id: string; distancia: number } | null = null;
-  for (const s of sitios) {
-    const distancia = distanciaMetros(punto, s);
-    if (distancia <= (s.radio_metros ?? RADIO_GEOCERCA_METROS) && (!mejor || distancia < mejor.distancia)) {
-      mejor = { id: s.id, distancia };
-    }
-  }
-  return mejor?.id ?? null;
+  return sitios.some((s) => distanciaMetros(punto, s) <= RADIO_GEOCERCA_METROS);
 }

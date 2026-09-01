@@ -1,19 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Info, FileDown, Sheet, Briefcase } from "lucide-react";
+import { Info, FileDown, Sheet } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   ensureCompany,
   listEmployees,
   listTimeEntriesInRange,
-  listTimeEntriesCompletas,
-  listWorkSites,
   type Company,
   type Employee,
   type PeriodoPago,
   type TimeEntry,
-  type WorkSite,
 } from "@/lib/supabase/queries";
 import { agruparPorSemana, liquidarSemana, type LiquidacionSemana, type Marcacion } from "@/lib/nomina";
 
@@ -104,82 +101,6 @@ function descargarExcelSemana(
   URL.revokeObjectURL(url);
 }
 
-interface ResumenProyecto {
-  sitio: WorkSite;
-  horasInvertidas: number;
-  empleadosInvolucrados: number;
-}
-
-/** Horas trabajadas de una marcación completa (cruza medianoche sin problema). */
-function horasDeMarcacion(t: TimeEntry): number {
-  if (!t.hora_salida) return 0;
-  const [he, mine] = t.hora_entrada.slice(0, 5).split(":").map(Number);
-  const [hs, mins] = t.hora_salida.slice(0, 5).split(":").map(Number);
-  let minutos = hs * 60 + mins - (he * 60 + mine);
-  if (minutos < 0) minutos += 24 * 60;
-  return minutos / 60;
-}
-
-function resumenPorProyecto(sitios: WorkSite[], entradas: TimeEntry[]): ResumenProyecto[] {
-  return sitios
-    .map((sitio) => {
-      const propias = entradas.filter((e) => e.work_site_id === sitio.id);
-      const horasInvertidas = propias.reduce((s, e) => s + horasDeMarcacion(e), 0);
-      const empleadosInvolucrados = new Set(propias.map((e) => e.employee_id)).size;
-      return { sitio, horasInvertidas, empleadosInvolucrados };
-    })
-    .filter((r) => r.horasInvertidas > 0);
-}
-
-function descargarPdfProyecto(nombreNegocio: string, resumen: ResumenProyecto) {
-  return (async () => {
-    const { jsPDF } = await import("jspdf");
-    const doc = new jsPDF();
-
-    doc.setFontSize(16);
-    doc.text(`Informe de avance — ${resumen.sitio.nombre}`, 14, 18);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(nombreNegocio, 14, 26);
-    if (resumen.sitio.cliente_final) doc.text(`Cliente: ${resumen.sitio.cliente_final}`, 14, 33);
-
-    doc.setFontSize(13);
-    doc.setTextColor(20);
-    doc.text(`Avance del proyecto: ${resumen.sitio.avance_porcentaje}%`, 14, 46);
-    doc.text(`Horas invertidas: ${resumen.horasInvertidas.toFixed(1)}h`, 14, 54);
-    doc.text(`Personas trabajando en el proyecto: ${resumen.empleadosInvolucrados}`, 14, 62);
-
-    doc.setFontSize(8);
-    doc.setTextColor(150);
-    doc.text(
-      `Generado el ${new Date().toLocaleDateString("es-CO")} — horas acumuladas desde el inicio del proyecto.`,
-      14,
-      doc.internal.pageSize.getHeight() - 10,
-    );
-
-    doc.save(`avance-${resumen.sitio.nombre.replace(/\s/g, "-")}.pdf`);
-  })();
-}
-
-function descargarExcelProyecto(nombreNegocio: string, resumen: ResumenProyecto) {
-  const filas = [
-    [nombreNegocio],
-    [`Informe de avance — ${resumen.sitio.nombre}`],
-    resumen.sitio.cliente_final ? [`Cliente: ${resumen.sitio.cliente_final}`] : [],
-    [],
-    ["Avance del proyecto", "Horas invertidas", "Personas involucradas"],
-    [`${resumen.sitio.avance_porcentaje}%`, resumen.horasInvertidas.toFixed(1), resumen.empleadosInvolucrados],
-  ];
-  const csv = "﻿" + filas.map((fila) => fila.map(celdaCsv).join(";")).join("\r\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `avance-${resumen.sitio.nombre.replace(/\s/g, "-")}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function aMarcacion(t: TimeEntry): Marcacion {
   return {
     id: t.id,
@@ -249,11 +170,8 @@ export default function ReportesPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [empleados, setEmpleados] = useState<Employee[]>([]);
   const [marcaciones, setMarcaciones] = useState<Marcacion[]>([]);
-  const [sitios, setSitios] = useState<WorkSite[]>([]);
-  const [entradasCompletas, setEntradasCompletas] = useState<TimeEntry[]>([]);
   const [cargando, setCargando] = useState(true);
   const [generandoPdf, setGenerandoPdf] = useState<string | null>(null);
-  const [vista, setVista] = useState<"nomina" | "proyectos">("nomina");
 
   useEffect(() => {
     const supabase = createClient();
@@ -266,7 +184,7 @@ export default function ReportesPage() {
       const hoy = new Date();
       const hace60 = new Date(hoy);
       hace60.setDate(hoy.getDate() - 60);
-      const [emps, entradas, sitiosData, completas] = await Promise.all([
+      const [emps, entradas] = await Promise.all([
         listEmployees(supabase, empresa.id),
         listTimeEntriesInRange(
           supabase,
@@ -274,14 +192,10 @@ export default function ReportesPage() {
           hace60.toISOString().slice(0, 10),
           hoy.toISOString().slice(0, 10),
         ),
-        listWorkSites(supabase, empresa.id),
-        listTimeEntriesCompletas(supabase, empresa.id),
       ]);
       setCompany(empresa);
       setEmpleados(emps);
       setMarcaciones(entradas.map(aMarcacion));
-      setSitios(sitiosData);
-      setEntradasCompletas(completas);
       setCargando(false);
     })();
   }, []);
@@ -334,107 +248,20 @@ export default function ReportesPage() {
     periodos.set(clave, acumulado);
   }
   const periodosOrdenados = Array.from(periodos.keys()).sort().reverse();
-  const proyectos = resumenPorProyecto(sitios, entradasCompletas);
 
   return (
     <div className="px-5 pt-6">
       <h1 className="font-display text-xl font-extrabold text-foreground">Reportes</h1>
 
-      <div className="mt-4 flex gap-1 rounded-xl bg-secondary p-1">
-        <button
-          onClick={() => setVista("nomina")}
-          className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
-            vista === "nomina" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-          }`}
-        >
-          Nómina
-        </button>
-        <button
-          onClick={() => setVista("proyectos")}
-          className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
-            vista === "proyectos" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-          }`}
-        >
-          Proyectos
-        </button>
+      <div className="mt-3 flex items-start gap-2 rounded-xl bg-accent p-3.5 text-accent-foreground">
+        <Info className="mt-0.5 h-4 w-4 shrink-0" />
+        <p className="text-xs leading-snug">
+          Cálculo basado en la Ley 2101 de 2021 (jornada de 42h, divisor 210). Te
+          recomendamos validar tus primeros reportes con tu contador antes de pagar.
+        </p>
       </div>
 
-      {vista === "nomina" && (
-        <div className="mt-3 flex items-start gap-2 rounded-xl bg-accent p-3.5 text-accent-foreground">
-          <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          <p className="text-xs leading-snug">
-            Cálculo basado en la Ley 2101 de 2021 (jornada de 42h, divisor 210). Te
-            recomendamos validar tus primeros reportes con tu contador antes de pagar.
-          </p>
-        </div>
-      )}
-
-      {vista === "proyectos" ? (
-        proyectos.length === 0 ? (
-          <div className="mt-6 flex min-h-[40vh] flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
-            <Briefcase className="mb-2 h-8 w-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              Todavía no hay horas registradas en ningún sitio de trabajo. Configura tus
-              proyectos en Ajustes y las marcaciones se irán sumando aquí.
-            </p>
-          </div>
-        ) : (
-          <div className="mt-5 space-y-4">
-            {proyectos.map((resumen) => (
-              <div key={resumen.sitio.id} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-foreground">{resumen.sitio.nombre}</p>
-                    {resumen.sitio.cliente_final && (
-                      <p className="truncate text-xs text-muted-foreground">
-                        Cliente: {resumen.sitio.cliente_final}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    <button
-                      onClick={() => descargarExcelProyecto(company?.name ?? "", resumen)}
-                      className="flex items-center gap-1 text-xs font-semibold text-primary"
-                    >
-                      <Sheet className="h-3.5 w-3.5" />
-                      Excel
-                    </button>
-                    <button
-                      onClick={async () => {
-                        setGenerandoPdf(resumen.sitio.id);
-                        try {
-                          await descargarPdfProyecto(company?.name ?? "", resumen);
-                        } finally {
-                          setGenerandoPdf(null);
-                        }
-                      }}
-                      disabled={generandoPdf === resumen.sitio.id}
-                      className="flex items-center gap-1 text-xs font-semibold text-primary disabled:opacity-50"
-                    >
-                      <FileDown className="h-3.5 w-3.5" />
-                      {generandoPdf === resumen.sitio.id ? "Generando..." : "PDF"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-                  <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${resumen.sitio.avance_porcentaje}%` }}
-                  />
-                </div>
-                <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{resumen.sitio.avance_porcentaje}% completado</span>
-                  <span>
-                    {resumen.horasInvertidas.toFixed(1)}h invertidas · {resumen.empleadosInvolucrados}{" "}
-                    {resumen.empleadosInvolucrados === 1 ? "persona" : "personas"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )
-      ) : periodosOrdenados.length === 0 ? (
+      {periodosOrdenados.length === 0 ? (
         <div className="mt-6 flex min-h-[40vh] flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
           <p className="text-sm text-muted-foreground">
             Todavía no hay marcaciones completas para liquidar. Marca la salida de un
