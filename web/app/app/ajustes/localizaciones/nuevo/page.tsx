@@ -28,6 +28,7 @@ export default function NuevaLocalizacionPage() {
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState<ResultadoBusqueda[]>([]);
   const [buscando, setBuscando] = useState(false);
+  const [busquedaRealizada, setBusquedaRealizada] = useState(false);
   const [punto, setPunto] = useState<{ lat: number; lng: number } | null>(null);
   const [direccion, setDireccion] = useState<string | null>(null);
   const [radio, setRadio] = useState(150);
@@ -64,6 +65,7 @@ export default function NuevaLocalizacionPage() {
 
   function buscar(texto: string) {
     setBusqueda(texto);
+    setBusquedaRealizada(false);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (texto.trim().length < 3) {
       setResultados([]);
@@ -79,6 +81,7 @@ export default function NuevaLocalizacionPage() {
         setResultados([]);
       } finally {
         setBuscando(false);
+        setBusquedaRealizada(true);
       }
     }, 500);
   }
@@ -142,6 +145,7 @@ export default function NuevaLocalizacionPage() {
               onClick={() => {
                 setBusqueda("");
                 setResultados([]);
+                setBusquedaRealizada(false);
               }}
               aria-label="Limpiar búsqueda"
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -149,9 +153,15 @@ export default function NuevaLocalizacionPage() {
               <X className="h-4 w-4" />
             </button>
           )}
-          {(resultados.length > 0 || buscando) && (
+          {(resultados.length > 0 || buscando || (busquedaRealizada && busqueda.trim().length >= 3)) && (
             <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-border bg-card shadow-lg">
               {buscando && <p className="p-3 text-xs text-muted-foreground">Buscando...</p>}
+              {!buscando && resultados.length === 0 && busquedaRealizada && (
+                <p className="p-3 text-xs text-muted-foreground">
+                  No encontramos esa dirección. Prueba con algo más simple (calle, barrio o
+                  ciudad) y después ajusta el pin a mano en el mapa.
+                </p>
+              )}
               {resultados.map((r, i) => (
                 <button
                   key={i}
