@@ -9,18 +9,16 @@ import {
   listEmployees,
   listTimeEntriesForDate,
   listWorkSites,
-  listWorkSiteActivities,
   crearMarcacionEntrada,
   marcarSalida,
   type Company,
   type Employee,
   type TimeEntry,
   type WorkSite,
-  type WorkSiteActivity,
 } from "@/lib/supabase/queries";
 import { hoyISO, horaAhora } from "@/lib/app-storage";
 import { esFestivoColombia } from "@/lib/festivos-colombia";
-import { dentroDeAlgunSitio, sitioDentroDeRango } from "@/lib/geo";
+import { dentroDeAlgunSitio } from "@/lib/geo";
 
 type FaseCamara = "cargando-datos" | "cargando" | "lista" | "error" | "capturada";
 type EstadoGeo = "buscando" | "ok" | "error";
@@ -43,9 +41,6 @@ function MarcarContenido() {
   const [esFestivo, setEsFestivo] = useState(() => esFestivoColombia(new Date()));
   const [guardando, setGuardando] = useState(false);
   const [sitios, setSitios] = useState<WorkSite[]>([]);
-  const [actividadesDelSitio, setActividadesDelSitio] = useState<WorkSiteActivity[]>([]);
-  const [actividadId, setActividadId] = useState<string | null>(null);
-  const sitioIdCargadoRef = useRef<string | null>(null);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
@@ -75,19 +70,6 @@ function MarcarContenido() {
   }, [empleadoId]);
 
   const tipo: "entrada" | "salida" = turnoAbierto ? "salida" : "entrada";
-  const sitioId = coords ? sitioDentroDeRango(coords, sitios) : null;
-
-  // Al marcar ENTRADA, si el punto cae dentro de un sitio con actividades
-  // registradas, se piden para saber en cuál va a trabajar hoy — no bloquea
-  // nada si el sitio no tiene actividades o no cayó dentro de ninguno.
-  useEffect(() => {
-    if (tipo !== "entrada" || !sitioId || sitioIdCargadoRef.current === sitioId) return;
-    sitioIdCargadoRef.current = sitioId;
-    const supabase = createClient();
-    listWorkSiteActivities(supabase, sitioId).then((actividades) => {
-      setActividadesDelSitio(actividades.filter((a) => !a.completada));
-    });
-  }, [sitioId, tipo]);
 
   const camaraSolicitadaRef = useRef(false);
 
@@ -234,8 +216,6 @@ function MarcarContenido() {
         lat: coords?.lat,
         lng: coords?.lng,
         fuera_de_rango: coords ? !dentroDeAlgunSitio(coords, sitios) : false,
-        work_site_id: sitioId,
-        activity_id: actividadId,
       });
     } else if (turnoAbierto) {
       await marcarSalida(supabase, turnoAbierto.id, horaAhora(), fotoUrl);
@@ -348,50 +328,16 @@ function MarcarContenido() {
           </label>
         )}
 
-        {tipo === "entrada" && actividadesDelSitio.length > 0 && (
-          <div className="mt-3 px-1">
-            <p className="text-sm font-medium text-foreground">¿En qué actividad vas a trabajar hoy?</p>
-            <div className="mt-2 space-y-1.5">
-              {actividadesDelSitio.map((a) => (
-                <label
-                  key={a.id}
-                  className={`flex items-center gap-2 rounded-lg border p-2.5 text-sm text-foreground ${
-                    actividadId === a.id ? "border-primary bg-accent" : "border-border"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="actividad"
-                    checked={actividadId === a.id}
-                    onChange={() => setActividadId(a.id)}
-                    className="h-4 w-4 accent-primary"
-                  />
-                  {a.nombre}
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-
         <p className="mt-3 px-1 text-xs leading-snug text-muted-foreground">
           Esta foto y ubicación solo se usan para respaldar a {empleado.nombre.split(" ")[0]} y
           al negocio ante cualquier reclamo — nadie más las ve.
         </p>
 
-        {(() => {
-          const faltaActividad = tipo === "entrada" && actividadesDelSitio.length > 0 && !actividadId;
-          if (!faltaActividad) return null;
-          return (
-            <p className="mt-2 px-1 text-xs text-warning">Elige una actividad para poder marcar.</p>
-          );
-        })()}
-
         <div className="mt-auto pt-5">
           {fase === "lista" && (
             <button
               onClick={() => capturar()}
-              disabled={tipo === "entrada" && actividadesDelSitio.length > 0 && !actividadId}
-              className="flex h-13 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-40"
+              className="flex h-13 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground"
               style={{ height: 52 }}
             >
               <Camera className="h-4.5 w-4.5" /> Tomar foto y marcar {tipo}
@@ -400,8 +346,7 @@ function MarcarContenido() {
           {fase === "error" && (
             <button
               onClick={confirmar}
-              disabled={tipo === "entrada" && actividadesDelSitio.length > 0 && !actividadId}
-              className="flex h-12 w-full items-center justify-center rounded-lg border border-border bg-card text-[15px] font-semibold text-foreground disabled:opacity-40"
+              className="flex h-12 w-full items-center justify-center rounded-lg border border-border bg-card text-[15px] font-semibold text-foreground"
             >
               Continuar sin foto
             </button>
@@ -409,7 +354,7 @@ function MarcarContenido() {
           {fase === "capturada" && (
             <button
               onClick={confirmar}
-              disabled={guardando || (tipo === "entrada" && actividadesDelSitio.length > 0 && !actividadId)}
+              disabled={guardando}
               className="flex h-13 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-60"
               style={{ height: 52 }}
             >
