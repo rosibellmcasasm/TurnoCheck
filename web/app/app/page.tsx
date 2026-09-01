@@ -386,6 +386,17 @@ export default function HoyPage() {
                 </div>
               )}
 
+              {verMarcacion.entry.notas_actividades && (
+                <div className="mt-3 rounded-lg bg-secondary p-2.5">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Actividades del día
+                  </p>
+                  <p className="text-xs leading-snug text-foreground">
+                    {verMarcacion.entry.notas_actividades}
+                  </p>
+                </div>
+              )}
+
               {verMarcacion.entry.lat && verMarcacion.entry.lng && (
                 <a
                   href={`https://www.google.com/maps?q=${verMarcacion.entry.lat},${verMarcacion.entry.lng}`}

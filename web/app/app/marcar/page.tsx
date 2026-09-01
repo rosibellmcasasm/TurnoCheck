@@ -48,6 +48,7 @@ function MarcarContenido() {
   // Se autodetecta con el calendario oficial colombiano al montar — el dueño
   // puede ajustarlo igual (ej. un festivo local que la ley nacional no cubre).
   const [esFestivo, setEsFestivo] = useState(() => esFestivoColombia(new Date()));
+  const [notasActividades, setNotasActividades] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [sitios, setSitios] = useState<WorkSite[]>([]);
 
@@ -244,7 +245,7 @@ function MarcarContenido() {
         work_site_id: sitioId,
       });
     } else if (accion === "salida" && turnoAbierto) {
-      await marcarSalida(supabase, turnoAbierto.id, horaAhora(), fotoUrl);
+      await marcarSalida(supabase, turnoAbierto.id, horaAhora(), fotoUrl, notasActividades);
     } else if (accion === "movimiento" && turnoAbierto) {
       await crearCheckpoint(supabase, userId, turnoAbierto.id, {
         work_site_id: sitioId,
@@ -406,6 +407,19 @@ function MarcarContenido() {
             />
             Hoy es festivo en Colombia
             <span className="text-xs text-muted-foreground">(detectado automático, ajústalo si hace falta)</span>
+          </label>
+        )}
+
+        {accion === "salida" && (
+          <label className="mt-3 block px-1 text-sm font-medium text-foreground">
+            ¿Qué actividades realizaste hoy? (opcional)
+            <textarea
+              value={notasActividades}
+              onChange={(e) => setNotasActividades(e.target.value)}
+              placeholder="Ej: Cimentación de la zona norte, vaciado de placa..."
+              rows={3}
+              className="mt-1.5 w-full resize-none rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary"
+            />
           </label>
         )}
 

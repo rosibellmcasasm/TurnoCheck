@@ -51,6 +51,7 @@ export interface TimeEntry {
   lng: number | null;
   fuera_de_rango: boolean;
   work_site_id: string | null;
+  notas_actividades: string | null;
   created_at: string;
 }
 
@@ -266,10 +267,15 @@ export async function marcarSalida(
   timeEntryId: string,
   horaSalida: string,
   fotoSalidaUrl?: string,
+  notasActividades?: string | null,
 ) {
   const { error } = await supabase
     .from("time_entries")
-    .update({ hora_salida: horaSalida, foto_salida_url: fotoSalidaUrl ?? null })
+    .update({
+      hora_salida: horaSalida,
+      foto_salida_url: fotoSalidaUrl ?? null,
+      notas_actividades: notasActividades?.trim() || null,
+    })
     .eq("id", timeEntryId);
   if (error) throw error;
 }
