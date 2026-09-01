@@ -11,6 +11,7 @@ import {
   listEmployees,
   listTimeEntriesForDate,
   getFotoMarcacionUrl,
+  cerrarTurnosVencidos,
   type Company,
   type Employee,
   type TimeEntry,
@@ -56,6 +57,17 @@ function estadoDeHoy(empleadoId: string, entradas: TimeEntry[]) {
   return { estado: "pendiente" as const, hora: null, horaSalida: null, fueraDeRango: false, entry: null };
 }
 
+/** "2h 15m" desde que marcó entrada hasta ahora — para el panel en vivo. */
+function tiempoTranscurrido(fecha: string, horaEntrada: string, ahora: number) {
+  const [y, m, d] = fecha.split("-").map(Number);
+  const [h, min] = horaEntrada.split(":").map(Number);
+  const inicio = new Date(y, m - 1, d, h, min).getTime();
+  const minutos = Math.max(0, Math.round((ahora - inicio) / 60000));
+  const horas = Math.floor(minutos / 60);
+  const resto = minutos % 60;
+  return horas > 0 ? `${horas}h ${resto}m` : `${resto}m`;
+}
+
 export default function HoyPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [empleados, setEmpleados] = useState<Employee[]>([]);
@@ -65,6 +77,12 @@ export default function HoyPage() {
   const [fotoEntradaUrl, setFotoEntradaUrl] = useState<string | null>(null);
   const [fotoSalidaUrl, setFotoSalidaUrl] = useState<string | null>(null);
   const [cargandoFoto, setCargandoFoto] = useState(false);
+  const [ahora, setAhora] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setAhora(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   async function abrirMarcacion(emp: Employee, entry: TimeEntry) {
     setVerMarcacion({ emp, entry });
@@ -93,6 +111,7 @@ export default function HoyPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
       const empresa = await ensureCompany(supabase, user.id);
+      await cerrarTurnosVencidos(supabase, empresa);
       const [emps, hoy] = await Promise.all([
         listEmployees(supabase, empresa.id),
         listTimeEntriesForDate(supabase, empresa.id, hoyISO()),
@@ -119,6 +138,14 @@ export default function HoyPage() {
   const yaMarcaron = empleadosActivos.filter(
     (e) => estadoDeHoy(e.id, entradas).estado !== "pendiente",
   ).length;
+
+  const trabajandoAhora = empleadosActivos
+    .map((emp) => {
+      const propias = entradas.filter((e) => e.employee_id === emp.id);
+      const abierta = propias.find((e) => !e.hora_salida);
+      return abierta ? { emp, entry: abierta } : null;
+    })
+    .filter((x): x is { emp: Employee; entry: TimeEntry } => x !== null);
 
   const nominaHoy = entradas.reduce((acc, m) => {
     const empleado = empleados.find((e) => e.id === m.employee_id);
@@ -152,6 +179,30 @@ export default function HoyPage() {
           {yaMarcaron} de {empleadosActivos.length} empleados ya marcaron
         </p>
       </div>
+
+      {trabajandoAhora.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-success/30 bg-success-soft p-4">
+          <div className="flex items-center gap-1.5">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+            </span>
+            <h2 className="text-xs font-bold uppercase tracking-wide text-success">
+              Trabajando ahora · {trabajandoAhora.length}
+            </h2>
+          </div>
+          <div className="mt-2.5 space-y-2">
+            {trabajandoAhora.map(({ emp, entry }) => (
+              <div key={emp.id} className="flex items-center justify-between text-sm">
+                <span className="min-w-0 truncate font-medium text-foreground">{emp.nombre}</span>
+                <span className="tabular shrink-0 text-xs text-muted-foreground">
+                  {tiempoTranscurrido(entry.fecha, entry.hora_entrada.slice(0, 5), ahora)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-6 flex items-center justify-between">
         <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
@@ -347,10 +398,18 @@ export default function HoyPage() {
                     <span className="text-muted-foreground">Salida</span>
                     <span className="tabular font-medium text-foreground">
                       {verMarcacion.entry.hora_salida.slice(0, 5)}
+                      {verMarcacion.entry.cierre_automatico && " (automática)"}
                     </span>
                   </div>
                 )}
               </div>
+
+              {verMarcacion.entry.cierre_automatico && (
+                <p className="mt-2 text-xs text-warning">
+                  El empleado no marcó su salida — la app cerró el turno sola a la hora
+                  configurada en Ajustes.
+                </p>
+              )}
 
               {verMarcacion.entry.lat && verMarcacion.entry.lng && (
                 <a

@@ -8,6 +8,7 @@ import {
   ensureCompany,
   updateCompanyName,
   updateCompanyPeriodoPago,
+  updateCompanyHoraCierre,
   listWorkSites,
   createWorkSite,
   toggleWorkSiteActivo,
@@ -65,6 +66,14 @@ export default function AjustesPage() {
     setCompany({ ...company, periodo_pago: periodo });
     const supabase = createClient();
     await updateCompanyPeriodoPago(supabase, company.id, periodo);
+  }
+
+  async function cambiarHoraCierre(hora: string) {
+    if (!company) return;
+    const horaCierre = hora === "" ? null : hora;
+    setCompany({ ...company, hora_cierre_automatico: horaCierre });
+    const supabase = createClient();
+    await updateCompanyHoraCierre(supabase, company.id, horaCierre);
   }
 
   function agregarSitio() {
@@ -215,6 +224,21 @@ export default function AjustesPage() {
           </button>
         </div>
         {errorSitio && <p className="mt-2 text-xs text-destructive">{errorSitio}</p>}
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <h2 className="font-display text-sm font-bold text-foreground">Salida automática</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Si un empleado se olvida de marcar su salida, la app cierra sola ese turno a la
+          hora que elijas aquí (nunca el turno de hoy — solo los que quedaron abiertos de
+          días anteriores). Déjalo vacío para desactivarlo.
+        </p>
+        <input
+          type="time"
+          value={company.hora_cierre_automatico ?? ""}
+          onChange={(e) => cambiarHoraCierre(e.target.value)}
+          className="mt-3 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary"
+        />
       </div>
 
       <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-border bg-card p-4 shadow-sm">

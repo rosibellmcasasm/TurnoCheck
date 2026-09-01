@@ -12,6 +12,7 @@ export interface Company {
   plan: "micro" | "pyme";
   plan_empleados_limite: number;
   periodo_pago: PeriodoPago;
+  hora_cierre_automatico: string | null;
   created_at: string;
 }
 
@@ -42,6 +43,7 @@ export interface TimeEntry {
   lat: number | null;
   lng: number | null;
   fuera_de_rango: boolean;
+  cierre_automatico: boolean;
   created_at: string;
 }
 
@@ -179,6 +181,57 @@ export async function listTimeEntriesInRange(
     .not("hora_salida", "is", null);
   if (error) throw error;
   return data as TimeEntry[];
+}
+
+/** Turnos abiertos ahora mismo (sin hora de salida), de cualquier fecha — para el
+ *  panel "quién está trabajando ahora" y el mapa en vivo. */
+export async function listMarcacionesAbiertas(supabase: SupabaseClient, companyId: string) {
+  const { data, error } = await supabase
+    .from("time_entries")
+    .select("*")
+    .eq("company_id", companyId)
+    .is("hora_salida", null);
+  if (error) throw error;
+  return data as TimeEntry[];
+}
+
+export async function updateCompanyHoraCierre(
+  supabase: SupabaseClient,
+  companyId: string,
+  horaCierre: string | null,
+) {
+  const { error } = await supabase
+    .from("companies")
+    .update({ hora_cierre_automatico: horaCierre })
+    .eq("id", companyId);
+  if (error) throw error;
+}
+
+/** Cierra solos los turnos que quedaron abiertos de DÍAS ANTERIORES (nunca el de
+ *  hoy, que puede seguir en curso de verdad) usando la hora de cierre configurada.
+ *  Es una limpieza de "primera versión": corre cuando alguien abre la app, no un
+ *  cron en segundo plano — así que el cierre aparece un poco después de esa hora,
+ *  no exactamente a esa hora. */
+export async function cerrarTurnosVencidos(supabase: SupabaseClient, company: Company) {
+  if (!company.hora_cierre_automatico) return;
+  const hoy = new Date().toISOString().slice(0, 10);
+  const { data: abiertos, error } = await supabase
+    .from("time_entries")
+    .select("id, fecha")
+    .eq("company_id", company.id)
+    .is("hora_salida", null)
+    .lt("fecha", hoy);
+  if (error) throw error;
+  if (!abiertos || abiertos.length === 0) return;
+
+  await Promise.all(
+    abiertos.map((t) =>
+      supabase
+        .from("time_entries")
+        .update({ hora_salida: company.hora_cierre_automatico, cierre_automatico: true })
+        .eq("id", t.id),
+    ),
+  );
 }
 
 export async function crearMarcacionEntrada(

@@ -1,5 +1,26 @@
 # ESTADO — TurnoCheck
-Última actualización: 2026-07-31 | Sesión actual: 1
+Última actualización: 2026-09-01 | Sesión actual: 1
+
+## Inspiración Jibble: panel en vivo, mapa y salida automática (2026-09-01)
+La usuaria compartió un documento con 76 capturas del recorrido de Jibble. Se filtró qué
+aplica a un negocio pyme colombiano (no integraciones tipo Slack/QuickBooks/HubSpot ni
+roles complejos — eso es para empresas grandes) y se construyeron 3 cosas:
+- ✅ Panel "Trabajando ahora" en Hoy — tarjeta en vivo (punto verde animado) que muestra
+  qué empleados están marcados en este momento con el tiempo transcurrido, actualizado
+  cada minuto.
+- ✅ Mapa en vivo (`/app/mapa`, nuevo ítem en la barra inferior) — usa Leaflet +
+  OpenStreetMap (gratis, sin API key ni costo) para mostrar los sitios de trabajo
+  (círculos de la geocerca) y dónde está marcando cada empleado ahora mismo.
+- ✅ Salida automática — nuevo ajuste "hora de cierre automático" en Ajustes. Si un
+  empleado olvida marcar salida, la app cierra sola ese turno (solo los de DÍAS
+  ANTERIORES, nunca el de hoy) la próxima vez que alguien abre la app — es una limpieza
+  de primera versión, no un cron real en segundo plano, así que el cierre puede aparecer
+  un poco después de la hora configurada. Los turnos cerrados así quedan marcados
+  `cierre_automatico = true` y se lo avisan al dueño en el modal de foto de Hoy.
+- Migración `0013` (companies.hora_cierre_automatico, time_entries.cierre_automatico).
+- Se agregó `leaflet` + `react-leaflet` (+ `@types/leaflet` dev) — se revisó con
+  `npm audit` antes de usarlos, sin vulnerabilidades nuevas.
+- PENDIENTE: confirmación de la usuaria probando las 3 en producción.
 
 ## Cámara, foto de salida y exportar a Excel (2026-07-31)
 - ✅ RAÍZ del video en negro en /app/marcar encontrada: el `useEffect` que pedía la cámara
