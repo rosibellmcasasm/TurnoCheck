@@ -9,6 +9,7 @@ import {
   ensureCompany,
   listEmployees,
   createEmployee,
+  updateEmployee,
   deleteEmployee,
   puedeAgregarEmpleado,
   type Company,
@@ -26,6 +27,7 @@ export default function EmpleadosPage() {
   const [empleados, setEmpleados] = useState<Employee[]>([]);
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState(false);
+  const [editando, setEditando] = useState<Employee | null>(null);
 
   const [nombre, setNombre] = useState("");
   const [cargo, setCargo] = useState("");
@@ -47,6 +49,26 @@ export default function EmpleadosPage() {
     setHorarioSemanal({});
     setDescansoInicio("");
     setDescansoFin("");
+  }
+
+  function abrirEdicion(emp: Employee) {
+    setEditando(emp);
+    setNombre(emp.nombre);
+    setCargo(emp.cargo ?? "");
+    setSalario(String(emp.salario_mensual));
+    setEmail(emp.email ?? "");
+    setTelefono(emp.telefono ?? "");
+    setDisponibilidad(emp.disponibilidad);
+    setHorarioSemanal(emp.horario_semanal ?? {});
+    setDescansoInicio(emp.descanso_inicio?.slice(0, 5) ?? "");
+    setDescansoFin(emp.descanso_fin?.slice(0, 5) ?? "");
+    setAbierto(true);
+  }
+
+  function abrirCreacion() {
+    setEditando(null);
+    limpiarFormulario();
+    setAbierto(true);
   }
 
   function actualizarDia(dia: DiaSemana, cambios: Partial<HorarioDia>) {
@@ -98,8 +120,7 @@ export default function EmpleadosPage() {
     const supabase = createClient();
 
     const algunDiaActivo = Object.values(horarioSemanal).some((d) => d?.activo);
-
-    await createEmployee(supabase, userId, company.id, {
+    const datos = {
       nombre: nombre.trim(),
       cargo: cargo.trim() || "Sin cargo",
       salario_mensual: Number(salario) || 1_423_500,
@@ -109,8 +130,15 @@ export default function EmpleadosPage() {
       horario_semanal: algunDiaActivo ? horarioSemanal : null,
       descanso_inicio: descansoInicio || null,
       descanso_fin: descansoFin || null,
-    });
+    };
+
+    if (editando) {
+      await updateEmployee(supabase, editando.id, datos);
+    } else {
+      await createEmployee(supabase, userId, company.id, datos);
+    }
     limpiarFormulario();
+    setEditando(null);
     setAbierto(false);
     await cargar();
   }
@@ -138,7 +166,7 @@ export default function EmpleadosPage() {
         <motion.button
           whileTap={{ scale: 0.97 }}
           transition={{ duration: 0.12 }}
-          onClick={() => (enLimite ? router.push("/paywall") : setAbierto(true))}
+          onClick={() => (enLimite ? router.push("/paywall") : abrirCreacion())}
           className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
         >
           <UserPlus className="h-4 w-4" /> Agregar
@@ -174,7 +202,7 @@ export default function EmpleadosPage() {
               key={emp.id}
               className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5 shadow-sm"
             >
-              <div className="min-w-0 flex-1">
+              <button onClick={() => abrirEdicion(emp)} className="min-w-0 flex-1 text-left">
                 <p className="truncate text-sm font-semibold text-foreground">{emp.nombre}</p>
                 <p className="text-xs text-muted-foreground">
                   {emp.cargo} · ${emp.salario_mensual.toLocaleString("es-CO")}/mes ·{" "}
@@ -189,10 +217,10 @@ export default function EmpleadosPage() {
                       `${emp.horario_semanal ? " · " : ""}Descanso ${emp.descanso_inicio.slice(0, 5)}-${emp.descanso_fin.slice(0, 5)}`}
                   </p>
                 )}
-              </div>
+              </button>
               <button
                 onClick={() => eliminar(emp.id)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-destructive"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-destructive"
                 aria-label={`Eliminar a ${emp.nombre}`}
               >
                 <Trash2 className="h-4 w-4" />
@@ -219,8 +247,16 @@ export default function EmpleadosPage() {
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             >
               <div className="flex items-center justify-between">
-                <h2 className="font-display text-base font-bold text-foreground">Nuevo empleado</h2>
-                <button onClick={() => setAbierto(false)} aria-label="Cerrar">
+                <h2 className="font-display text-base font-bold text-foreground">
+                  {editando ? "Editar empleado" : "Nuevo empleado"}
+                </h2>
+                <button
+                  onClick={() => {
+                    setAbierto(false);
+                    setEditando(null);
+                  }}
+                  aria-label="Cerrar"
+                >
                   <X className="h-5 w-5 text-muted-foreground" />
                 </button>
               </div>
@@ -376,7 +412,7 @@ export default function EmpleadosPage() {
                 disabled={nombre.trim().length < 2}
                 className="mt-5 flex h-12 w-full items-center justify-center rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-40"
               >
-                Guardar empleado
+                {editando ? "Guardar cambios" : "Guardar empleado"}
               </motion.button>
             </motion.div>
           </motion.div>
