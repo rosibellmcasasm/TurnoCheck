@@ -2,7 +2,6 @@
 
 import "leaflet/dist/leaflet.css";
 import { MapContainer, TileLayer, Circle, CircleMarker, Popup } from "react-leaflet";
-import { RADIO_GEOCERCA_METROS } from "@/lib/geo";
 import type { WorkSite } from "@/lib/supabase/queries";
 
 export interface PuntoEnVivo {
@@ -35,7 +34,7 @@ export function LiveMap({ sitios, puntos }: { sitios: WorkSite[]; puntos: PuntoE
           <Circle
             key={s.id}
             center={[s.lat, s.lng]}
-            radius={RADIO_GEOCERCA_METROS}
+            radius={s.radio_metros}
             pathOptions={{ color: "#2554c7", fillColor: "#2554c7", fillOpacity: 0.12, weight: 1.5 }}
           >
             <Popup>{s.nombre}</Popup>

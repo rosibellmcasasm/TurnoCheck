@@ -58,6 +58,7 @@ export interface WorkSite {
   activo: boolean;
   cliente_final: string | null;
   avance_porcentaje: number;
+  radio_metros: number;
   created_at: string;
 }
 
@@ -335,7 +336,7 @@ export async function createWorkSite(
   supabase: SupabaseClient,
   userId: string,
   companyId: string,
-  input: { nombre: string; lat: number; lng: number },
+  input: { nombre: string; lat: number; lng: number; radio_metros?: number },
 ) {
   const { data, error } = await supabase
     .from("work_sites")
