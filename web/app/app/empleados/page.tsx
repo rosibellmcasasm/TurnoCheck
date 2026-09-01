@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
-import { UserPlus, Trash2, X, Lock } from "lucide-react";
+import { UserPlus, Trash2, X, Lock, CopyPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   ensureCompany,
@@ -54,6 +54,22 @@ export default function EmpleadosPage() {
       ...prev,
       [dia]: { ...HORARIO_VACIO, ...prev[dia], ...cambios },
     }));
+  }
+
+  /** Copia la entrada/salida de un día a los demás días de la semana — para
+   *  no tener que digitar lo mismo 7 veces cuando el horario es igual todos
+   *  los días. Los días que ya estaban marcados como inactivos quedan
+   *  activos también (se pueden desmarcar después, ej. el domingo libre). */
+  function copiarATodosLosDias(origen: DiaSemana) {
+    const horario = horarioSemanal[origen];
+    if (!horario?.entrada || !horario?.salida) return;
+    setHorarioSemanal((prev) => {
+      const copia: HorarioSemanal = {};
+      for (const { valor } of DIAS_SEMANA) {
+        copia[valor] = { activo: true, entrada: horario.entrada, salida: horario.salida };
+      }
+      return { ...prev, ...copia };
+    });
   }
 
   async function cargar() {
@@ -317,6 +333,14 @@ export default function EmpleadosPage() {
                               className="h-10 w-full rounded-lg border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:border-primary"
                             />
                           </div>
+                        )}
+                        {dia.activo && dia.entrada && dia.salida && (
+                          <button
+                            onClick={() => copiarATodosLosDias(valor)}
+                            className="mt-2 flex items-center gap-1 text-xs font-semibold text-primary"
+                          >
+                            <CopyPlus className="h-3.5 w-3.5" /> Usar este horario todos los días
+                          </button>
                         )}
                       </div>
                     );
