@@ -120,6 +120,12 @@ export default function HoyPage() {
   const [movimientos, setMovimientos] = useState<TimeEntryCheckpoint[]>([]);
   const [entradasAmplias, setEntradasAmplias] = useState<TimeEntry[]>([]);
   const [periodoVista, setPeriodoVista] = useState<"dia" | "semana" | "mes">("semana");
+  const [ahora, setAhora] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setAhora(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   async function abrirMarcacion(emp: Employee, entry: TimeEntry) {
     setVerMarcacion({ emp, entry });
@@ -273,13 +279,18 @@ export default function HoyPage() {
 
   return (
     <div className="px-5 pt-6">
-      <p className="text-sm text-muted-foreground">
-        {new Date().toLocaleDateString("es-CO", {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-        })}
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          {ahora.toLocaleDateString("es-CO", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+          })}
+        </p>
+        <p className="tabular text-sm font-semibold text-foreground">
+          {ahora.toLocaleTimeString("es-CO", { hour: "numeric", minute: "2-digit" })}
+        </p>
+      </div>
       <h1 className="font-display text-xl font-extrabold text-foreground">
         Hola, {company.name}
       </h1>
